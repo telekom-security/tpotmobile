@@ -1,0 +1,14 @@
+[Unit]
+Description=T-Pot Display
+Wants=docker.service network-online.target
+After=docker.service network-online.target tpot.service
+
+[Service]
+Type=exec
+TimeoutSec=infinity
+WorkingDirectory=/home/$LOGNAME/tpotmobile
+ExecStartPre=/home/$LOGNAME/tpotmobile/tools/wait4net.sh
+ExecStart=/home/$LOGNAME/tpotmobile/bin/python3 /home/$LOGNAME/tpotmobile/display.py
+
+[Install]
+WantedBy=multi-user.target

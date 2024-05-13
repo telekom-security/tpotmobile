@@ -1,0 +1,25 @@
+DTBOs for the SPI based Waveshare 3.5inch RPI LCD (C) do not work any longer with SDL / Pygame on Debian Bookworm.
+The reason is the lacking Direct Rendering Manager support (DRM) which SDL relies on with KMSDRM to control the display.
+
+General support is available with the Piscreen DTBO:
+https://github.com/raspberrypi/linux/blob/rpi-6.1.y/arch/arm/boot/dts/overlays/piscreen-overlay.dts
+
+However the DTBO's settings do not allow for screen rotation in KMS/DRM mode.
+
+As a result a remix of these 3 DTBOs has been created with the GPIO includes being resolved to allow for easy compilation with dtc:
+https://github.com/raspberrypi/linux/blob/rpi-6.1.y/arch/arm/boot/dts/overlays/piscreen-overlay.dts
+https://github.com/raspberrypi/linux/blob/rpi-6.1.y/arch/arm/boot/dts/overlays/piscreen2r-overlay.dts
+https://github.com/raspberrypi/linux/blob/rpi-6.1.y/arch/arm/boot/dts/overlays/watterott-display-overlay.dts
+
+The resulting piscreen.dts is available in this folder and can be compiled with:
+dtc -@ -I dts -O dtb -o piscreen.dtbo piscreen.dts
+
+Then you need to copy it to the overlay folder:
+sudo cp piscreen.dtbo /boot/overlays/
+
+Run the piscreen_builder.sh script to compile the piscreen.dts and copy it to the tpotmobile/settings folder.
+If you need adjustments after installation of the Raspberry Pi T-Pot copy the newly compiled piscreen.dtbo to the overlays folder.
+
+The tpotmobile/settings folder will contain a config.txt example, however the installer will handle the adjustments.
+
+Should the rotate / rotation settings not fit your setup you can adjust the piscreen.dts with 0, 90, 180 or 270. Then compile and reinstall it.

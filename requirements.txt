@@ -1,0 +1,7 @@
+dnspython
+elasticsearch
+netifaces
+pytz
+requests
+tzlocal
+smbus2
