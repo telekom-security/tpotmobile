@@ -57,6 +57,7 @@ bash install.sh
 cd $HOME
 # We do not want T-Pot to update automatically
 sed -i s/TPOT_PULL_POLICY=always/TPOT_PULL_POLICY=missing/g tpotce/.env
+sed -i '/^TPOT_TYPE=/c\TPOT_TYPE=MOBILE' tpotce/.env
 # We need to adjust the T-Pot service
 sudo bash -c "sed s/'\$LOGNAME'/${LOGNAME}/g tpotmobile/settings/tpot.service > /etc/systemd/system/tpot.service"
 sudo systemctl daemon-reload
