@@ -18,5 +18,6 @@ def create_mercator_map(filename, width, height, latrange_min, latrange_max):
     # Save the figure without white borders
     plt.savefig(filename, format='png', transparent=False, bbox_inches='tight', pad_inches=0, dpi=100)
 
-create_mercator_map('map476320.png', 480, 320, -63, 83)
-create_mercator_map('map800477.png', 800, 480, -60, 80)
+create_mercator_map('map_476320.png', 480, 320, -63, 83)
+create_mercator_map('map_800477.png', 800, 480, -60, 80)
+create_mercator_map('map_1280794.png', 1280, 800, -64, 80)

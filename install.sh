@@ -8,7 +8,7 @@ echo "# T-Pot Mobile Installer #"
 echo "##########################"
 echo
 
-CONFIG_FILE="/boot/config.txt"
+CONFIG_FILE="/boot/firmware/config.txt"
 
 ######
 # Go to home folder, install updates and clone repositories
@@ -26,14 +26,43 @@ git clone https://github.com/telekom-security/tpotce
 # Setup configs
 ######
 
-# Function to set dtoverlay for DSI display
-set_dsi_display() {
-    sudo sed --follow-symlinks -i 's/^dtoverlay=.*/dtoverlay=vc4-kms-v3d/' $CONFIG_FILE
+# Functions to set dtoverlay for DSI 4.3 or 8inch display
+set_dsi_display43() {
+    echo "# Setting up DSI Waveshare 4.3inch capacitive touch display"
+    echo "dtoverlay=vc4-kms-v3d" | sudo tee -a ${CONFIG_FILE}
     sudo raspi-config nonint do_spi 1 # 0 is enable, 1 is disable
 }
 
-echo "# Setting up Waveshare 4.3inch capacitive display ..."
-set_dsi_display
+set_dsi_display8() {
+    echo "# Setting up DSI Waveshare 8inch capacitive touch display"
+    # Both overlays are needed for the 8inch display to work properly
+    echo "dtoverlay=vc4-kms-v3d" | sudo tee -a ${CONFIG_FILE}
+    echo "dtoverlay=vc4-kms-dsi-waveshare-panel,8_0_inch" | sudo tee -a ${CONFIG_FILE}
+    sudo raspi-config nonint do_spi 1 # 0 is enable, 1 is disable
+}
+
+# Ask the user to select the display type
+echo
+echo "###################################################"
+echo "# Select the display type:"
+echo "# [1] DSI - Waveshare 4.3inch capacitive"
+echo "# [2] DSI - Waveshare 8.0inch capacitive"
+echo "###################################################"
+echo
+read -p "# Enter your choice (1 or 2): " choice
+
+case $choice in
+    1)
+        set_dsi_display43
+        ;;
+    2)
+        set_dsi_display8
+        ;;
+    *)
+        echo "Invalid choice. Exiting."
+        exit 1
+        ;;
+esac
 
 echo
 echo "# Now setting up T-Pot Mobile. Please be patient ..."

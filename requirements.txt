@@ -1,5 +1,5 @@
 dnspython
-elasticsearch
+elasticsearch==8.18.1
 netifaces
 pytz
 requests

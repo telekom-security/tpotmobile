@@ -1,41 +1,40 @@
+from collections import deque
 from datetime import datetime, timedelta
-import time
-import os
-import socket
+from elasticsearch import Elasticsearch
+from logging import exception
+from modules.ina219_module import INA219
+from tzlocal import get_localzone
+import dns.resolver
+import math
 import netifaces
-import pytz
+import os
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"  # Suppress Pygame welcome message
 import pygame
+import pytz
+import random
+import re
+import socket
 import subprocess
-import math
 import sys
-from modules import myip
-from elasticsearch import Elasticsearch
-from tzlocal import get_localzone
-from modules.ina219_module import INA219
+import time
 
 es = Elasticsearch('http://127.0.0.1:64298')
-# es = Elasticsearch('http://elasticsearch:9200')
 es_index = "logstash-*"
-version = 'T-Pot Mobile v0.6'
+version = 'T-Pot Mobile v2.0'
 local_tz = get_localzone()
+
+# Some global settings
+wifi_if = "wlan0"
 
 # Counter, indices, etc.
 circle_counter = 0
 active_pings = []
 bar_space, bar_depth = 1, 4
 last_three_events = []
+network_fails = 0
 
 # Pygame Settings
 os.environ['SDL_AUDIODRIVER'] = 'dummy'  # Prevent sound support
-# os.environ["SDL_VIDEODRIVER"] = "KMSDRM"
-# os.environ["SDL_FBDEV"] = "/dev/fb0"
-# os.environ["SDL_MOUSEDRV"] = "TSLIB"
-# os.environ["SDL_MOUSEDEV"] = "/dev/input/event0"
-# os.environ['TSLIB_FBDEVICE'] = '/dev/fb0'
-# os.environ['TSLIB_TSDEVICE'] = '/dev/input/event0'
-# os.environ['TSLIB_CONFFILE'] = '/etc/ts.conf'
-# os.environ['TSLIB_CALIBFILE'] = '/etc/pointercal'
 pygame.init()
 
 # Get list of supported fullscreen modes
@@ -50,13 +49,15 @@ else:
     width, height = 800, 480
 
 # Use the tools/map_builder.py to create correctly projected Mercator maps
-# Keeping this section in case other display resolutions need to be supported (touch motion support required)
+#width=800
+#height=480
 if width == 800 and height == 480:
     background_image = "images/tpot_800480.png"
     map_image = "images/map_800477.png"
     font_size = 34
     button_font_size = 36
     info_font_size = 28
+    map_font_size = 28
     axis_font_size = 22
     button_width, button_height = 120, 120
     button_spacing = 20
@@ -65,6 +66,22 @@ if width == 800 and height == 480:
     event_surface_height = 195
     event_horizontal_offset = 175
     latrange_min = -60
+    latrange_max = 80
+elif width == 1280 and height == 800:
+    background_image = "images/tpot_1280800.png"
+    map_image = "images/map_1280794.png"
+    font_size = 44
+    button_font_size = 40
+    info_font_size = 32
+    map_font_size = 38
+    axis_font_size = 32
+    button_width, button_height = 160, 160
+    button_spacing = 40
+    circle_radius = 8
+    chart_surface_height = 270
+    event_surface_height = 430
+    event_horizontal_offset = 230
+    latrange_min = -64
     latrange_max = 80
 else:
     print("Error. Resolution not supported.")
@@ -114,31 +131,43 @@ timeframes = [
 
 # All the honeypot types
 honeypot_types = [
-    "Adbhoney", "Ciscoasa", "CitrixHoneypot", "ConPot", "Cowrie", "Ddospot", "Dicompot", "Dionaea",
-    "ElasticPot", "Endlessh", "Glutton", "Hellpot", "Heralding", "Honeytrap", "Honeypots",
-    "Log4pot", "Ipphoney", "Mailoney", "Medpot", "Redishoneypot", "Sentrypeer", "Tanner", "Wordpot"
+    "Adbhoney", "Beelzebub", "Ciscoasa", "CitrixHoneypot", "ConPot",
+    "Cowrie", "Ddospot", "Dicompot", "Dionaea", "ElasticPot",
+    "Endlessh", "Galah", "Glutton", "Go-pot", "H0neytr4p", "Hellpot", "Heralding", 
+    "Honeyaml", "Honeytrap", "Honeypots", "Log4pot", "Ipphoney", "Mailoney", 
+    "Medpot", "Miniprint", "Redishoneypot", "Sentrypeer", "Tanner", "Wordpot"
 ]
 
 # Color Codes for Attack Map
 service_rgb = {
-    'FTP': (255, 0, 0),
-    'SSH': (255, 128, 0),
-    'TELNET': (255, 255, 0),
-    'EMAIL': (128, 255, 0),
-    'SQL': (0, 255, 0),
-    'DNS': (0, 255, 128),
-    'HTTP': (0, 255, 255),
-    'HTTPS': (0, 128, 255),
-    'VNC': (0, 0, 255),
-    'SNMP': (128, 0, 255),
-    'SMB': (191, 0, 255),
-    'MEDICAL': (255, 0, 255),
-    'RDP': (255, 0, 96),
-    'SIP': (255, 204, 255),
-    'ADB': (255, 204, 204),
-    'OTHER': (255, 255, 255)
+'ANDROID': (64, 255, 128),
+'DATABASE': (0, 128, 0),
+'DNS': (0, 153, 204),
+'EMAIL': (128, 255, 0),
+'FTP': (255, 0, 0),
+'HTTP': (0, 0, 255),
+'HTTPS': (0, 128, 255),
+'MEDICAL': (255, 0, 255),
+'PRINTER': (1, 205, 151),
+'REDIS': (255, 46, 0),
+'RDP': (255, 0, 96),
+'VOIP': (255, 192, 255),
+'SMB': (191, 0, 255),
+'SNMP': (128, 0, 255),
+'SSH': (255, 165, 80),
+'TELNET': (255, 255, 0),
+'VNC': (0, 0, 255),
+'OTHER': (255, 255, 255)
+# 'Red-Orange' : (255, 139, 0),
+# 'Yellow-Green' : (51, 204, 0),
+# 'Green-Cyan' : (0, 153, 204),
+# 'Blue': (0, 0, 238),
+# 'Violet-Red' : (143, 0, 62),
+# 'Magenta-Cyan' : (0, 197, 255),
+# 'Violet-White': (142, 36, 170),
+# 'Pink' : (244, 192, 203),
+# 'Red-Magenta' : (211, 0, 95)
 }
-
 
 def init_ina219():
     battery_device_address = 0x42
@@ -201,6 +230,7 @@ def init_screen():
     global font
     global axis_font
     global info_font
+    global map_font
     global background
     global background_surface
     global background_position
@@ -222,11 +252,13 @@ def init_screen():
 
     font = pygame.font.Font(None, font_size)
     info_font = pygame.font.Font(None, info_font_size)
+    map_font = pygame.font.Font(None, map_font_size)
     axis_font = pygame.font.Font(None, axis_font_size)
     pygame.mouse.set_visible(False)
     # Flags
     # Define new dimensions
     flag_height = info_font.get_height()
+    flag_height_map = map_font.get_height()
     flags_dir = "flags/"
 
     # Load flag images, resize them, and names into a list
@@ -247,7 +279,7 @@ def init_screen():
     dialog_surface = pygame.Surface((width, height), pygame.SRCALPHA)
     dialog_surface.fill((50, 50, 50, 200))
     stats_surface = pygame.Surface((width, info_font.get_height() + 5), pygame.SRCALPHA)
-    map_event_surface = pygame.Surface((width, ((info_font.get_height() + 5) * 3) + 2), pygame.SRCALPHA)
+    map_event_surface = pygame.Surface((width, ((map_font.get_height() + 5) * 3) + 2), pygame.SRCALPHA)
     event_surface = pygame.Surface((width, event_surface_height), pygame.SRCALPHA)
     chart_surface = pygame.Surface((width, chart_surface_height), pygame.SRCALPHA)
     map_surface = pygame.Surface((width, height), pygame.SRCALPHA)
@@ -277,16 +309,18 @@ def port_to_type(port):
             23: "TELNET", 2223: "TELNET",
             25: "EMAIL", 143: "EMAIL", 110: "EMAIL", 993: "EMAIL", 995: "EMAIL",
             53: "DNS",
-            80: "HTTP", 81: "HTTP", 8080: "HTTP",
+            80: "HTTP", 81: "HTTP", 8080: "HTTP", 8888: "HTTP",
             161: "SNMP",
             443: "HTTPS", 8443: "HTTPS",
             445: "SMB",
-            1433: "SQL", 1521: "SQL", 3306: "SQL",
+            631: "PRINTER", 9100: "PRINTER",
+            1433: "DATABASE", 1521: "DATABASE", 3306: "DATABASE",
             2575: "MEDICAL", 11112: "MEDICAL",
-            5900: "VNC",
             3389: "RDP",
-            5060: "SIP", 5061: "SIP",
-            5555: "ADB"
+            5060: "VOIP", 5061: "VOIP",
+            5555: "ANDROID",
+            5900: "VNC",
+            6379: "REDIS"
         }
         return port_map.get(port, str(port))
     except:
@@ -390,91 +424,116 @@ def get_honeypot_events(mylast, mynow):
         index=es_index,
         size=100,
         query={
-            "bool": {
-                "must": [
-                    {
-                        "terms": {
-                            "type.keyword": honeypot_types
-                        }
-                    }
-                ],
-                "filter": [
-                    {
-                        "range": {
-                            "@timestamp": {
-                                "gte": mylast[0] + "T" + mylast[1],
-                                "lte": mynow[0] + "T" + mynow[1]
+                "bool": {
+                    "must": [],
+                    "filter": [
+                        {
+                            "terms": {
+                                "type.keyword": honeypot_types
+                            }
+                        },
+                        {
+                            "range": {
+                                "@timestamp": {
+                                    "format": "strict_date_optional_time",
+                                    "gte": mylast[0] + "T" + mylast[1],
+                                    "lte": mynow[0] + "T" + mynow[1]
+                                }
                             }
                         }
-                    }
-                ]
+                    ]
+                }
             }
-        }
     )
     return honeypot_data
 
 
 def process_honeypot_event(hit):
-    event = {
-        "honeypot": hit["_source"]["type"],
-        "country": hit["_source"]["geoip"].get("country_name", ""),
-        "country_code": hit["_source"]["geoip"].get("country_code2", ""),
-        "city": hit["_source"]["geoip"].get("city_name", ""),
-        "continent_code": hit["_source"]["geoip"].get("continent_code", ""),
-        "as_org": hit["_source"]["geoip"].get("as_org"),
-        "dst_lat": hit["_source"]["geoip_ext"]["latitude"],
-        "dst_long": hit["_source"]["geoip_ext"]["longitude"],
-        "dst_ip": hit["_source"]["geoip_ext"]["ip"],
-        "dst_iso_code": hit["_source"]["geoip_ext"].get("country_code2", ""),
-        "dst_country_name": hit["_source"]["geoip_ext"].get("country_name", ""),
-        "tpot_hostname": hit["_source"]["t-pot_hostname"],
-        "event_time": str(hit["_source"]["@timestamp"][0:10]) + " " + str(hit["_source"]["@timestamp"][11:19]),
-        "iso_code": hit["_source"]["geoip"]["country_code2"],
-        "latitude": hit["_source"]["geoip"]["latitude"],
-        "longitude": hit["_source"]["geoip"]["longitude"],
-        "dst_port": hit["_source"]["dest_port"],
-        "protocol": port_to_type(hit["_source"]["dest_port"]),
-        "src_ip": hit["_source"]["src_ip"]
-    }
-
     try:
-        event["src_port"] = hit["_source"]["src_port"]
-    except:
-        event["src_port"] = 0
-    try:
-        event["ip_rep"] = hit["_source"]["ip_rep"]
-    except:
-        event["ip_rep"] = "reputation unknown"
-    if event["city"] == "":
-        event["city"] = "Unknown"
-    if not event["src_ip"] == "":
+        event = {
+            "honeypot": hit["_source"]["type"],
+            "country": hit["_source"]["geoip"].get("country_name", ""),
+            "country_code": hit["_source"]["geoip"].get("country_code2", ""),
+            "region_name": hit["_source"]["geoip"].get("region_name"),
+            "city": hit["_source"]["geoip"].get("city_name", "Unknown"),
+            "continent_code": hit["_source"]["geoip"].get("continent_code", ""),
+            "as_org": hit["_source"]["geoip"].get("as_org", ""),
+            "dst_lat": hit["_source"]["geoip_ext"]["latitude"],
+            "dst_long": hit["_source"]["geoip_ext"]["longitude"],
+            "dst_ip": hit["_source"]["geoip_ext"]["ip"],
+            "dst_iso_code": hit["_source"]["geoip_ext"].get("country_code2", ""),
+            "dst_country_name": hit["_source"]["geoip_ext"].get("country_name", ""),
+            "tpot_hostname": hit["_source"]["t-pot_hostname"],
+            "event_time": str(hit["_source"]["@timestamp"][0:10]) + " " + str(hit["_source"]["@timestamp"][11:19]),
+            "iso_code": hit["_source"]["geoip"]["country_code2"],
+            "ip_rep": hit["_source"].get("ip_rep", "reputation unknown"),
+            "latitude": hit["_source"]["geoip"]["latitude"],
+            "longitude": hit["_source"]["geoip"]["longitude"],
+            "dest_port": hit["_source"].get("dest_port", ""),
+            "data_type": hit["_source"].get("data_type"), # conpot
+            "event_type": hit["_source"].get("event_type"), # conpot, elasticpot
+            "http_user_agent": hit["_source"].get("http_user_agent"), # elasticpot
+            "http.url": hit["_source"].get("http.url"), # elasticpot
+            "input": hit["_source"].get("input"), # cowrie, adbhoney
+            "msg": hit["_source"].get("msg"), # dicompot
+            "payload_printable": hit["_source"].get("payload_printable", ""), # ciscoasa
+            "username": hit["_source"].get("username", ""),
+            "password": hit["_source"].get("password", ""),
+            "headers.user-agent": hit["_source"].get("headers", {}).get("user-agent"), # tanner
+            "user-agent_os": hit["_source"].get("user-agent_os"), # h0neytr4p
+            "user-agent_browser": hit["_source"].get("user-agent_browser"), # h0neytr4p
+            "user_agent_browser": hit["_source"].get("user_agent_browser"), # honeyaml
+            "path": hit["_source"].get("path"), # honeyaml, tanner
+            "ipp_query.operation": hit["_source"].get("ipp_query.operation"), # ipphoney
+            "data": hit["_source"].get("data"), # mailoney
+            "info": hit["_source"].get("info"), # miniprint, wordpot
+            "action": hit["_source"].get("action"), # redishoneypot
+            "request_uri": hit["_source"].get("request_uri"), # h0neytr4p
+            "browser_family": hit["_source"].get("browser_family"), # wordpot
+            "browser_version": hit["_source"].get("browser_version"), # wordpot
+            "url": hit["_source"].get("url"), # wordpot
+            "plugin": hit["_source"].get("plugin"), # wordpot
+            "request.requestURI": hit["_source"].get("request.requestURI"), # galah
+            "request.userAgent": hit["_source"].get("request.userAgent"), # galah
+            "protocol": port_to_type(hit["_source"].get("dest_port", "")),
+            "src_ip": hit["_source"]["src_ip"]
+        }
+    except Exception as e:
+        print(f"Exception on: {e} for {event['honeypot']}")
+        pass
+    if event["dest_port"] != "":
         try:
             event["color"] = service_rgb[event["protocol"].upper()]
         except:
             event["color"] = service_rgb["OTHER"]
         return event
     else:
-        print("SRC IP EMPTY")
+        event["color"] = service_rgb["OTHER"]
+        event["protocol"] = "N/A"
+        if event["protocol"] == "N/A" and (event["input"] is None and event["payload_printable"] is None):
+            pass
+        else:  
+            return event
 
 
 def calculate_max_widths():
     # Returns the maximum width for the flag and a list of maximum widths for each column across the last_three_events.
-    max_flag_width = 0
+    max_flag_width_map = 0
     max_column_widths = [0] * 5  # Assuming 5 columns, adjust if needed
 
     for event in last_three_events:
         # Calculate maximum flag width
-        flag_image = get_flag_image(event["country_code"])
-        max_flag_width = max(max_flag_width, flag_image.get_width())
+        flag_image_map = get_flag_image(event["country_code"])
+        max_flag_width_map = max(max_flag_width_map, flag_image_map.get_width())
 
         table_data = [
             event["country"], event["src_ip"], event["protocol"].lower(),
             event["honeypot"], event["ip_rep"].title()
         ]
         for i, value in enumerate(table_data):
-            max_column_widths[i] = max(max_column_widths[i], info_font.size(value)[0])
+            max_column_widths[i] = max(max_column_widths[i], map_font.size(value)[0])
 
-    return max_flag_width, max_column_widths
+    return max_flag_width_map, max_column_widths
 
 
 def draw_honeypot_event_on_map(event):
@@ -487,10 +546,10 @@ def draw_honeypot_event_on_map(event):
     map_event_surface.fill(stats_surface_background)
 
     # Calculate maximum widths for the flag and each column
-    max_flag_width, max_column_widths = calculate_max_widths()
+    max_flag_width_map, max_column_widths = calculate_max_widths()
 
     # Calculate the total width needed and then find out the extra space available
-    total_width_needed = max_flag_width + sum(max_column_widths) + (len(max_column_widths) - 1) * 5  # 5 as a base gap
+    total_width_needed = max_flag_width_map + sum(max_column_widths) + (len(max_column_widths) - 1) * 5  # 5 as a base gap
     extra_space = width - total_width_needed - 2 * 4  # subtracting the x_offset on both sides
 
     # Distribute the extra space evenly among the gaps
@@ -499,27 +558,27 @@ def draw_honeypot_event_on_map(event):
     # Iterate over the events in the list and render them
     for idx, event in enumerate(last_three_events):
         # Calculate the y position based on the event's index
-        y = idx * (info_font.get_height() + 5) + 4
-        render_event_on_map(event, y, max_flag_width, max_column_widths, gap)
+        y = idx * (map_font.get_height() + 5) + 4
+        render_event_on_map(event, y, max_flag_width_map, max_column_widths, gap)
 
 
-def render_event_on_map(event, y, max_flag_width, max_column_widths, gap):
+def render_event_on_map(event, y, max_flag_width_map, max_column_widths, gap):
     x, x_offset = 0, 4
 
     # Render the flag image
-    flag_image = get_flag_image(event["country_code"])
+    flag_image_map = get_flag_image(event["country_code"])
     # Align the flag in the center of the allocated space
-    flag_x = x_offset + (max_flag_width - flag_image.get_width()) // 2
-    map_event_surface.blit(flag_image, (flag_x, y))
+    flag_x = x_offset + (max_flag_width_map - flag_image_map.get_width()) // 2
+    map_event_surface.blit(flag_image_map, (flag_x, y))
 
     table_data = [
         event["country"], event["src_ip"], event["protocol"].lower(),
         event["honeypot"], event["ip_rep"].title()
     ]
 
-    x = x_offset + max_flag_width + 2
+    x = x_offset + max_flag_width_map + 2
     for i, value in enumerate(table_data):
-        map_event_text = info_font.render(value, True, event['color'])
+        map_event_text = map_font.render(value, True, event['color'])
         map_event_surface.blit(map_event_text, (int(x), y))
         x += max_column_widths[i] + gap
 
@@ -595,6 +654,13 @@ def draw_honeypot_event(event):
     my_time = my_time.replace(tzinfo=pytz.UTC)  # Assuming event_time is in UTC
     local_event_time = my_time.astimezone(local_tz)
     local_event_time = local_event_time.strftime("%Y-%m-%d %H:%M:%S")
+    max_length = 60
+
+    # rewrite protocol for LLM based honeypots
+    if event["honeypot"] == "Beelzebub":
+        event["protocol"] = "SSH Interactive LLM"
+    if event["honeypot"] == "Galah":
+        event["protocol"] = "HTTP Interactive LLM"
 
     # Descriptions for each column
     descriptions = [
@@ -606,6 +672,121 @@ def draw_honeypot_event(event):
         local_event_time, event["country"], event["city"], event["src_ip"], event["as_org"].title(),
         event["ip_rep"].title(), event["protocol"], event["honeypot"]
     ]
+
+    # Enable more features at higher resolutions
+    if width >= 1280 and height >= 800:
+        # city
+        if event["city"] == "Unknown":
+            descriptions.remove("City:")
+            table_data.remove(event["city"])
+
+        # region
+        if event["region_name"] is not None:
+            descriptions.insert(descriptions.index("City:"), "Region:")
+            table_data.insert(2, event["region_name"])
+        
+        # remove empty port
+        if event["protocol"] == "N/A":
+            descriptions.remove("Port:")
+            table_data.remove(event["protocol"])
+
+        # various honeypots
+        if event["input"] is not None:
+            descriptions.append("Command:")
+            table_data.append(event["input"][:max_length])
+        if event["username"] != "":
+            descriptions.append("Username:")
+            table_data.append(event["username"][:max_length])
+        if event["password"] != "":
+            descriptions.append("Password:")
+            table_data.append(event["password"][:max_length])
+        if event["payload_printable"] != "":
+            descriptions.append("Command:")
+            table_data.append(event["payload_printable"][:max_length])
+
+        # conpot
+        if event["data_type"] is not None:
+            descriptions.append("Data Type:")
+            table_data.append(event["data_type"].title())
+        if event["event_type"] is not None:
+            descriptions.append("Event Type:")
+            table_data.append(event["event_type"].title())
+
+        # dicompot, beelzebub
+        if event["msg"] is not None and (event["honeypot"] == "Dicompot" or event["honeypot"] == "Beelzebub"):
+            descriptions.append("Request:")
+            table_data.append(event["msg"][:max_length])
+
+        # elasticpot, ipphoney
+        if event["http_user_agent"] is not None:
+            descriptions.append("UserAgent:")
+            table_data.append(event["http_user_agent"][:max_length])
+        if event["http.url"] is not None:
+            descriptions.append("Request:")
+            table_data.append(event["http.url"][:max_length])
+
+        # tanner
+        if event["headers.user-agent"] is not None and event["honeypot"] == "Tanner":
+            descriptions.append("UserAgent:")
+            table_data.append(event["headers.user-agent"][:max_length])
+
+        # galah
+        if event["request.userAgent"] is not None:
+            descriptions.append("UserAgent:")
+            table_data.append(event["request.userAgent"][:max_length])
+        if event["request.requestURI"] is not None:
+            descriptions.append("Request:")
+            table_data.append(event["request.requestURI"][:max_length])
+
+        # honeyaml
+        if event["user_agent_browser"] is not None:
+            descriptions.append("UserAgent:")
+            table_data.append(event["user_agent_browser"][:max_length])
+        if event["path"] is not None and (event["honeypot"] == "Honeyaml" or event["honeypot"] == "Tanner"):
+            descriptions.append("Request:")
+            table_data.append(event["path"][:max_length])
+
+        # h0neytr4p
+        if event["user-agent_os"] is not None:
+            descriptions.append("UserAgent OS:")
+            table_data.append(event["user-agent_os"][:max_length])
+        if event["user-agent_browser"] is not None:
+            descriptions.append("UserAgent:")
+            table_data.append(event["user-agent_browser"][:max_length])
+        if event["request_uri"] is not None:
+            descriptions.append("Request:")
+            table_data.append(event["request_uri"][:max_length])
+
+        # ipphoney
+        if event["ipp_query.operation"] is not None:
+            descriptions.append("Request:")
+            table_data.append(event["ipp_query.operation"].title())
+
+        # mailoney
+        if event["data"] is not None and event["honeypot"] == "Mailoney":
+            descriptions.append("Command:")
+            table_data.append(event["data"][:max_length])
+
+        # miniprint, wordpot
+        if event["info"] is not None and (event["honeypot"] == "Miniprint" or event["honeypot"] == "Wordpot"):
+            descriptions.append("Action:")
+            table_data.append(event["info"].title()[:max_length])
+
+        # redishoneypot
+        if event["action"] is not None and event["honeypot"] == "Redishoneypot":
+            descriptions.append("Action:")
+            table_data.append(event["action"].title()[:max_length])
+
+        # wordpot
+        if event["plugin"] is not None:
+            descriptions.append("Plugin:")
+            table_data.append(event["plugin"].title()[:max_length])
+        if event["url"] is not None:
+            descriptions.append("Request:")
+            table_data.append(event["url"][:max_length])
+        if event["browser_family"] is not None and event["browser_version"] is not None:
+            descriptions.append("UserAgent:")
+            table_data.append(event["browser_family"]+"/"+event["browser_version"][:max_length])
 
     # Display the event table line by line
     flag_image = get_flag_image(event["country_code"])
@@ -744,8 +925,84 @@ def draw_honeypot_stats(honeypot_stats):
             x = width - x_offset - info_font.size(stats_last[-1]['string'])[0]
 
 
+def get_rssi(interface=wifi_if):
+    try:
+        rssi = os.popen(f"wpa_cli -i {interface} signal_poll | head -n1 | cut -f 2 -d '='").read().strip()
+        
+        # Check if the value is an integer
+        if rssi.isdigit() or (rssi.startswith('-') and rssi[1:].isdigit()):
+            return rssi
+        else:
+            return "n/a"
+    except Exception as e:
+        print(e)
+        return "n/a"
+
+def is_inet_reachable(endpoints=None, timeout=2):
+    if endpoints is None:
+        # List of reliable DNS servers
+        endpoints = [
+            "8.8.8.8",   # Google Public DNS
+            "8.8.4.4",   # Google Public DNS (secondary)
+            "1.1.1.1",   # Cloudflare DNS
+            "1.0.0.1",   # Cloudflare DNS (secondary)
+            "9.9.9.9",   # Quad9 DNS
+            "149.112.112.112",  # Quad9 DNS (secondary)
+            "208.67.222.222",   # OpenDNS
+            "208.67.220.220",   # OpenDNS (secondary)
+            "4.2.2.1",   # Level 3 Communications DNS
+            "4.2.2.2"    # Level 3 Communications DNS (secondary)
+        ]
+
+    # Randomly choose one endpoint
+    endpoint = random.choice(endpoints)
+    try:
+        # Attempt to connect to the selected endpoint on port 53
+        with socket.create_connection((endpoint, 53), timeout=timeout):
+            return True
+    except Exception as e:
+        return False
+
+def get_external_ip_via_dns():
+    # List of DNS providers, their target domains, query types, and classes
+    dns_targets = [
+        ("216.239.32.10", "o-o.myaddr.l.google.com", "TXT", "IN"),  # Google Public DNS
+        ("216.239.32.10", "o-o.myaddr.l.google.com", "TXT", "IN"),  # Google Public DNS (secondary)
+        ("208.67.222.222", "myip.opendns.com", "A", "IN"),    # OpenDNS
+        ("208.67.220.220", "myip.opendns.com", "A", "IN"),    # OpenDNS (secondary)
+        ("1.1.1.1", "whoami.cloudflare", "TXT", "CH"),        # Cloudflare DNS
+        ("1.0.0.1", "whoami.cloudflare", "TXT", "CH")         # Cloudflare DNS (secondary)
+    ]
+
+    # Randomly select a DNS provider and its configuration
+    dns_server, target_domain, query_type, query_class = random.choice(dns_targets)
+
+    try:
+        resolver = dns.resolver.Resolver()
+        resolver.nameservers = [dns_server]
+        resolver.lifetime = 2  # Timeout in seconds
+        resolver.timeout = 2
+
+        # Perform the DNS query with the specified class
+        answer = resolver.resolve(target_domain, query_type, search=True, rdclass=dns.rdataclass.from_text(query_class))
+        # Convert the answer to a string and strip quotes
+        response = str(answer[0]).strip('"')
+        # Validate the response for an IP address
+        ip_match = re.search(r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b', response)
+        if ip_match:
+            return ip_match.group(0)
+        else:
+            print(f"Unexpected response format: {response}")
+            return "n/a"
+
+    except Exception as e:
+        print(f"Failed to query {dns_server} ({target_domain}): {e}")
+        return "n/a"
+
 def draw_system_info():
     global running
+    global network_fails
+    signal_strength = 0
     touch_pressed_time = 0
     int_ip = "n/a"
     ext_ip = "n/a"
@@ -754,10 +1011,24 @@ def draw_system_info():
         try:
             interface = netifaces.gateways()['default'][netifaces.AF_INET][1]
             int_ip = netifaces.ifaddresses(interface)[netifaces.AF_INET][0]['addr']
-            ext_ip = myip.get_external_ip()
-            # print(interface, int_ip)
+            # Attempt to get the external IP address with timeout handling
+            if is_inet_reachable():
+                try:
+                    ext_ip = get_external_ip_via_dns()
+                except Exception as e:
+                    ext_ip = "n/a"
+                    print(f"Failed to get external IP: {e}")
+            else:
+                network_fails += 1
+                if network_fails % 2 == 0:
+                    try:
+                        os.system(f"echo -n 'Reassociate {wifi_if}: ' && wpa_cli -i {wifi_if} reassociate")
+                    except Exception as e:
+                        print(f"Failed to reassociate: {e}")
         except Exception as e:
             int_ip = "n/a"
+            print(f"Failed to get internal IP: {e}")
+            
         if int_ip == "n/a":
             for i in range(31, 0, -1):
                 for event in pygame.event.get():
@@ -786,16 +1057,31 @@ def draw_system_info():
                 system_surface.blit(info_text, (4, 3))
                 screen.blit(system_surface, (0, height - system_surface.get_height()))
                 pygame.display.flip()
-                time.sleep(1)
-    # hostname = socket.gethostname()
-    # uptime = os.popen('uptime').read().strip().split(',')[0]
-    battery_info = get_battery_info(i2c_device)
+                pygame.time.wait(1000)
+
+    # Retrieve wifi signal strength
+    signal_strength = get_rssi()
+    if signal_strength != "n/a":
+        info_rssi = int(signal_strength)
+    else:
+        info_rssi = None
+
+    # Retrieve battery info
     battery_color = magenta
+    battery_info = get_battery_info(i2c_device)
+    if battery_info["current"] != "n/a":
+        if battery_info["current"].startswith("-"):
+            battery_charging = False
+        else:
+            battery_charging = True
+    else:
+        battery_charging = False
+
     if battery_info["percentage"] != "n/a":
         battery_info_float = float(battery_info["percentage"].strip("%"))
-        if battery_info_float >= 66:
-            battery_color = green
-        elif battery_info_float >= 50:
+        if battery_info_float >= 35:
+            battery_color = magenta
+        elif battery_info_float >= 30:
             battery_color = yellow
         elif battery_info_float >= 25:
             battery_color = orange
@@ -805,24 +1091,85 @@ def draw_system_info():
             running = False
             subprocess.run(["sudo", "poweroff"])
             close_app()
-    # info_hostname = f"Hostname: {hostname}"
-    info_ext_ip = f"Int IP: {int_ip}"
-    info_int_ip = f"Ext IP: {ext_ip}"
-    # info_uptime = f"Up: {uptime}"
-    info_battery_percentage = f"Battery: {battery_info['percentage']}"
-    # info_text_hostname = info_font.render(info_hostname, True, magenta)
+    else:
+        battery_color = system_surface_background
+        battery_info_float = 0
+
+    info_ext_ip = f"Ext IP: {ext_ip}"
+    info_int_ip = f"Int IP: {int_ip}"
     info_text_ext_ip = info_font.render(info_ext_ip, True, magenta)
     info_text_int_ip = info_font.render(info_int_ip, True, magenta)
-    # info_text_uptime = info_font.render(info_uptime, True, magenta)
-    info_text_battery = info_font.render(info_battery_percentage, True, battery_color)
+
     x_offset, y_offset = 4, 3
-    total_space = width - info_text_ext_ip.get_width() - info_text_battery.get_width()
-    half_space = int(total_space / 2)
-    int_ip_pos = int(x_offset / 2 + info_text_ext_ip.get_width() + half_space - (info_text_int_ip.get_width() / 2))
+    half_space = int((width + x_offset) / 2)
+    int_ip_pos = half_space - (info_text_int_ip.get_width() / 2)
+
+    # Render surface
     system_surface.fill(system_surface_background)
-    system_surface.blit(info_text_ext_ip, (int_ip_pos, y_offset))
-    system_surface.blit(info_text_int_ip, (x_offset, y_offset))
-    system_surface.blit(info_text_battery, (width - x_offset - info_text_battery.get_width(), y_offset))
+
+    # Draw the IP addresses
+    system_surface.blit(info_text_ext_ip, (x_offset, y_offset))
+    system_surface.blit(info_text_int_ip, (int_ip_pos, y_offset))
+
+    # Battery terminal dimensions
+    terminal_width = 5 # Width of the battery terminal
+    terminal_height = 10 # Height of the battery terminal
+    terminal_offset = 2 # Offset of the battery terminal
+
+    # Battery icon dimensions
+    battery_width = 50  # Width of the battery outline
+    battery_height = 20  # Height of the battery outline
+    battery_x = width - x_offset - battery_width - terminal_width - terminal_offset  # Position for the battery icon
+    battery_y = y_offset  # Align with other text
+
+    # Battery indicator
+    fill_width = int((battery_info_float / 100) * (battery_width - 4))
+
+    # Although bars are typically used for radio, it is a better fit for the UI here (looks just cleaner)
+    # Signal strength thresholds (dBm ranges)
+    thresholds = [-90, -80, -70, -60, -50]  # One threshold for each bar
+    num_bars = 5  # Total number of bars in the icon
+    bar_width = 8  # Width of each bar
+    bar_height_step = 4  # Height increment for each bar
+    bar_spacing = 2  # Spacing between bars
+    bar_x = width - x_offset - battery_width - terminal_width - bar_width - (num_bars * (bar_width + bar_spacing))  # Align bars to the right
+    bar_y = y_offset  # Adjust vertical position
+
+    # Draw signal strength bars
+    for i in range(num_bars):
+        bar_height = (i + 1) * bar_height_step
+        if info_rssi is not None and info_rssi >= thresholds[i]:
+            bar_color = magenta  # Active bar
+        else:
+            bar_color = grey  # Inactive bar
+
+        bar_rect = pygame.Rect(
+            bar_x + i * (bar_width + bar_spacing), 
+            bar_y + (num_bars - i - 1) * bar_height_step, 
+            bar_width, 
+            bar_height
+        )
+        # Draw the bar
+        pygame.draw.rect(system_surface, bar_color, bar_rect)
+
+    # Draw the battery outline
+    pygame.draw.rect(system_surface, grey, (battery_x, battery_y, battery_width, battery_height), 2)
+
+    # Draw the battery filling
+    pygame.draw.rect(
+        system_surface, battery_color, (battery_x + 2, battery_y + 2, fill_width, battery_height - 4)
+    )
+
+    # Draw the battery terminal
+    if battery_charging:
+        battery_terminal_color = magenta
+    else:
+        battery_terminal_color = grey
+    pygame.draw.rect(
+        system_surface,
+        battery_terminal_color,
+        (battery_x + battery_width + terminal_offset, battery_y + (battery_height - terminal_height) // 2, terminal_width, terminal_height),
+    )
 
 
 def draw_button(surface, button_rect, text, color):
@@ -851,8 +1198,12 @@ def system_action(action):
 
 def display_screens():
     global dialog_open
+    global pause
+    global event_display_interval
     # Draw standard overview
     if screen_index == 0:
+        pause = 90 # Pause in milliseconds
+        event_display_interval = 0.1
         screen.blit(background_surface, (0, 0))
         screen.blit(stats_surface, (0, 0))
         screen.blit(event_surface, (0, 35))
@@ -862,6 +1213,8 @@ def display_screens():
             screen.blit(dialog_surface, (0, 0))
     # Draw map overview
     if screen_index == 1:
+        pause = 1 # Pause in milliseconds
+        event_display_interval = 0
         screen.blit(map_surface, (0, 0))
         screen.blit(map_event_surface, (0, 0))
         if dialog_open:
@@ -874,72 +1227,86 @@ def update_honeypot_data():
     global stats_index
     global screen_index
     global dialog_open
+    global event_display_interval
     dialog_open = False
     start_touch_y = None
     start_touch_valid = False  # Flag to track if the start of the touch is valid
     stats_index = 2
     screen_index = 0
-    running = True
+    running = True # Main loop is actively running
     mydelta = 10
     time_last_request = datetime.utcnow() - timedelta(seconds=mydelta)
     events_interval = 0.5
+    event_queue = deque()  # Buffer for honeypot events
+    event_display_interval = 0.1  # Interval to display each event
     stats_interval = 5
     system_interval = 10
-    events_start_time = time.time()
-    stats_start_time = time.time()
-    system_start_time = time.time()
+    pause = 100  # Pause in milliseconds
+    now = time.time()
+    events_start_time = now
+    stats_start_time = now
+    system_start_time = now
+    last_event_display_time = now
+    
     while running:
-        #######################################################
-        # Get the honeypot stats every 5s (last 15m, 1h, 24h) #
-        #######################################################
-        stats_elapsed = time.time() - stats_start_time
-        if stats_elapsed > stats_interval:
+        now = time.time()
+
+        #############################
+        # Timed Updates for Actions #
+        #############################
+
+        # Get the honeypot stats every 5s (last 15m, 1h, 24h)
+        if now - stats_start_time > stats_interval:
             honeypot_stats = get_honeypot_stats()
             draw_honeypot_stats(honeypot_stats)
+            honeypot_histogram_data = get_honeypot_histogram(
+                main_interval=timeframes[stats_index]["duration"],
+                breakdown=timeframes[stats_index]["breakdown"],
+            )
+            draw_honeypot_bar_chart(
+                honeypot_histogram_data,
+                timeframes[stats_index]["duration"],
+                timeframes[stats_index]["breakdown"],
+                bar_space, bar_depth, height=chart_surface.get_height()
+            )
+            stats_start_time = now
 
-            honeypot_histogram_data = get_honeypot_histogram(main_interval=timeframes[stats_index]["duration"],
-                                                             breakdown=timeframes[stats_index]["breakdown"])
-            draw_honeypot_bar_chart(honeypot_histogram_data, timeframes[stats_index]["duration"],
-                                    timeframes[stats_index]["breakdown"],
-                                    bar_space, bar_depth, height=chart_surface.get_height())
-            stats_start_time = time.time()
-
-        #############################
-        # Get system info every 10s #
-        #############################
-        system_elapsed = time.time() - system_start_time
-        if system_elapsed > system_interval:
+        # Get system info every 10s
+        if now - system_start_time > system_interval:
             draw_system_info()
+            system_start_time = now
 
-            system_start_time = time.time()
-
-        ###################################################
-        # Get the last 100 new honeypot events every 0.5s #
-        ###################################################
-        events_elapsed = time.time() - events_start_time
-        if events_elapsed > events_interval:
+        # Get the last 100 new honeypot events every 0.5s
+        if now - events_start_time > events_interval:
             mylast = str(time_last_request).split(" ")
             mynow = str(datetime.utcnow() - timedelta(seconds=mydelta)).split(" ")
-
             honeypot_data = get_honeypot_events(mylast, mynow)
-
             honeypot_events = honeypot_data['hits']
+
             if len(honeypot_events['hits']) != 0:
                 time_last_request = datetime.utcnow() - timedelta(seconds=mydelta)
                 for honeypot_event in honeypot_events['hits']:
-                    try:
-                        processed_honeypot_event = process_honeypot_event(honeypot_event)
-                        if process_honeypot_event(honeypot_event) is not None:
-                            draw_honeypot_event(processed_honeypot_event)
-                            draw_honeypot_event_on_map(processed_honeypot_event)
-                            draw_honeypot_event_loc_on_map(processed_honeypot_event)
-                            display_screens()
-                            clock.tick(fps)
-                    except:
-                        pass
+                    event_queue.append(honeypot_event)  # Add events to the buffer
+            events_start_time = now
+
+        ############################
+        # Display Buffered Events #
+        ############################
+        if event_queue and now - last_event_display_time > event_display_interval:
+            honeypot_event = event_queue.popleft()
+            try:
+                processed_honeypot_event = process_honeypot_event(honeypot_event)
+                if processed_honeypot_event is not None:
+                    draw_honeypot_event(processed_honeypot_event)
+                    draw_honeypot_event_on_map(processed_honeypot_event)
+                    draw_honeypot_event_loc_on_map(processed_honeypot_event)
+                    display_screens()
+            except Exception as e:
+                print(f"Error processing event: {e}")
+            last_event_display_time = now
 
         ##########################
-        # Main Pygame event loop #
+        # Main Pygame Event Loop #
         ##########################
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -950,62 +1317,59 @@ def update_honeypot_data():
                     running = False
                     close_app()
             elif event.type == pygame.FINGERMOTION:
-                if start_touch_y is None:  # Starting a new motion
+                if start_touch_y is None:
                     start_touch_y = event.y * height
-                    # Check if the touch starts at the bottom 25% of the screen
                     if start_touch_y > (height * 0.75):
                         start_touch_valid = True
                 else:
-                    # Only consider motion if it started in a valid area
                     if start_touch_valid:
                         end_touch_y = event.y * height
-                        # Check if the motion went upwards at least half the screen height
                         if start_touch_y - end_touch_y > (height / 2):
                             dialog_open = True
             elif event.type == pygame.FINGERUP:
                 if not dialog_open and not start_touch_valid:
                     stats_index = (stats_index + 1) % len(timeframes)
                     for i, timeframe in enumerate(timeframes):
-                        if i == stats_index:
-                            timeframe["color"] = white
-                        else:
-                            timeframe["color"] = magenta
+                        timeframe["color"] = white if i == stats_index else magenta
                     honeypot_stats = get_honeypot_stats()
                     draw_honeypot_stats(honeypot_stats)
-                    honeypot_histogram_data = get_honeypot_histogram(main_interval=timeframes[stats_index]["duration"],
-                                                                     breakdown=timeframes[stats_index]["breakdown"])
-                    draw_honeypot_bar_chart(honeypot_histogram_data, timeframes[stats_index]["duration"],
-                                            timeframes[stats_index]["breakdown"],
-                                            bar_space, bar_depth, height=chart_surface.get_height())
-                # Reset on finger lift
+                    honeypot_histogram_data = get_honeypot_histogram(
+                        main_interval=timeframes[stats_index]["duration"],
+                        breakdown=timeframes[stats_index]["breakdown"],
+                    )
+                    draw_honeypot_bar_chart(
+                        honeypot_histogram_data,
+                        timeframes[stats_index]["duration"],
+                        timeframes[stats_index]["breakdown"],
+                        bar_space, bar_depth, height=chart_surface.get_height()
+                    )
                 start_touch_y = None
                 start_touch_valid = False
 
-        if dialog_open:
-            if screen_index == 0:
-              mode_button_text = "Map"
-            elif screen_index == 1:
-              mode_button_text = "Stats"
-            draw_button(dialog_surface, cancel_button_rect, "Cancel", grey)
-            draw_button(dialog_surface, mode_button_rect, mode_button_text, magenta)
-            draw_button(dialog_surface, reboot_button_rect, "Reboot", dark_orange)
-            draw_button(dialog_surface, poweroff_button_rect, "Power Off", dark_red)
-            # Check for button presses if dialog is open
-            if event.type == pygame.FINGERDOWN:
-                finger_pos = (event.x * width, event.y * height)
-                if cancel_button_rect.collidepoint(finger_pos):
-                    dialog_open = False  # Close dialog
-                elif mode_button_rect.collidepoint(finger_pos):
-                    system_action("MODE")
-                elif reboot_button_rect.collidepoint(finger_pos):
-                    system_action("REBOOT")
-                elif poweroff_button_rect.collidepoint(finger_pos):
-                    system_action("POWEROFF")
-                stats_index = (stats_index - 1) % len(timeframes)
+            if dialog_open:
+                mode_button_text = "Map" if screen_index == 0 else "Stats"
+                draw_button(dialog_surface, cancel_button_rect, "Cancel", grey)
+                draw_button(dialog_surface, mode_button_rect, mode_button_text, magenta)
+                draw_button(dialog_surface, reboot_button_rect, "Reboot", dark_orange)
+                draw_button(dialog_surface, poweroff_button_rect, "Power Off", dark_red)
+                if event.type == pygame.FINGERDOWN:
+                    finger_pos = (event.x * width, event.y * height)
+                    if cancel_button_rect.collidepoint(finger_pos):
+                        dialog_open = False
+                    elif mode_button_rect.collidepoint(finger_pos):
+                        system_action("MODE")
+                    elif reboot_button_rect.collidepoint(finger_pos):
+                        system_action("REBOOT")
+                    elif poweroff_button_rect.collidepoint(finger_pos):
+                        system_action("POWEROFF")
+                    stats_index = (stats_index - 1) % len(timeframes)
 
+        #######################
+        # Manage Frame Update #
+        #######################
         display_screens()
+        pygame.time.wait(pause) # Keep cpu usage low
         clock.tick(fps)
-
 
 if __name__ == '__main__':
     print(version)
@@ -1065,6 +1429,6 @@ if __name__ == '__main__':
                         stats_surface.blit(stats_text, (4, 3))
                         display_screens()
                         pygame.display.flip()
-                        time.sleep(1)
+                        pygame.time.wait(1000)
     except KeyboardInterrupt:
         close_app()
