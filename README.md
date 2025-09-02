@@ -222,7 +222,7 @@ Place the screen in front of you, face down.
 ![Build 4](screenshots/8inch/build4.jpg)
 
 #### 
-Align the Raspberry Pi on the standoffs and use the nuts (4 x M3) and standoffs (4 x M3 + 6) from the assortment to secure it. Also check the pogo pins align properly between the Pi and the display.
+Align the Raspberry Pi on the standoffs and use the nuts (4 x M2.5) and standoffs (4 x M2.5x15 + 6) from the assortment to secure it. Also check the pogo pins align properly between the Pi and the display.
 ![Build 5](screenshots/8inch/build5.jpg)
 ![Build 6](screenshots/8inch/build6.jpg)
 
@@ -240,7 +240,7 @@ Install the UPS HAT on top of the Pi4.
 ![Build 13](screenshots/8inch/build13.jpg)
 
 ####
-Now secure it with the standoffs as shown.
+Now secure it with the standoffs (M2.5x12+6 + M2.5x10+6) as shown.
 ![Build 14](screenshots/8inch/build14.jpg)
 ![Build 15](screenshots/8inch/build15.jpg)
 ![Build 16](screenshots/8inch/build16.jpg)
@@ -260,7 +260,7 @@ Now attach the top side of the case to the display to the 3d printed case.
 ![Build 21](screenshots/8inch/build21.jpg)
 
 ###
-Now screw the four M3 standoffs (as shown) into place. In both cases (heated inserts or not) make sure to not overtighten them, as the display standoffs have the tendency to snap off (do not ask how I know that). You can also use standoffs with a shorter end.
+Now screw the M3x15 standoffs (as shown) into place. In both cases (heated inserts or not) make sure to not overtighten them, as the display standoffs have the tendency to snap off (do not ask how I know that). You can also use standoffs with a shorter end.
 
 If you use heated inserts:
 - Make sure the standoffs align properly in a 90° angle, otherwise the heated inserts need re-alignment.
