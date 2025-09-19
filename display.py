@@ -26,6 +26,11 @@ local_tz = get_localzone()
 # Some global settings
 wifi_if = "wlan0"
 
+# External IP Cache
+ext_ip_cache = None
+last_ext_ip_check = 0
+EXT_IP_TTL = 300  # seconds (5 minutes)
+
 # Counter, indices, etc.
 circle_counter = 0
 active_pings = []
@@ -964,44 +969,62 @@ def is_inet_reachable(endpoints=None, timeout=2):
         return False
 
 def get_external_ip_via_dns():
-    # List of DNS providers, their target domains, query types, and classes
+    global ext_ip_cache, last_ext_ip_check
+
+    now = time.time()
+    # If cache is still valid, return it immediately
+    if ext_ip_cache is not None and (now - last_ext_ip_check) < EXT_IP_TTL:
+        #print(f"[DEBUG] Returning cached external IP: {ext_ip_cache}")
+        return ext_ip_cache
+
     dns_targets = [
         ("216.239.32.10", "o-o.myaddr.l.google.com", "TXT", "IN"),  # Google Public DNS
         ("216.239.32.10", "o-o.myaddr.l.google.com", "TXT", "IN"),  # Google Public DNS (secondary)
-        ("208.67.222.222", "myip.opendns.com", "A", "IN"),    # OpenDNS
-        ("208.67.220.220", "myip.opendns.com", "A", "IN"),    # OpenDNS (secondary)
-        ("1.1.1.1", "whoami.cloudflare", "TXT", "CH"),        # Cloudflare DNS
-        ("1.0.0.1", "whoami.cloudflare", "TXT", "CH")         # Cloudflare DNS (secondary)
+        ("208.67.222.222", "myip.opendns.com", "A", "IN"),          # OpenDNS
+        ("208.67.220.220", "myip.opendns.com", "A", "IN"),          # OpenDNS (secondary)
+        ("1.1.1.1", "whoami.cloudflare", "TXT", "CH"),              # Cloudflare DNS
+        ("1.0.0.1", "whoami.cloudflare", "TXT", "CH"),              # Cloudflare DNS (secondary)
     ]
 
-    # Randomly select a DNS provider and its configuration
     dns_server, target_domain, query_type, query_class = random.choice(dns_targets)
 
     try:
         resolver = dns.resolver.Resolver()
         resolver.nameservers = [dns_server]
-        resolver.lifetime = 2  # Timeout in seconds
+        resolver.lifetime = 2 # Timeout in seconds
         resolver.timeout = 2
 
-        # Perform the DNS query with the specified class
-        answer = resolver.resolve(target_domain, query_type, search=True, rdclass=dns.rdataclass.from_text(query_class))
+        answer = resolver.resolve(
+            target_domain,
+            query_type,
+            search=True,
+            rdclass=dns.rdataclass.from_text(query_class)
+        )
+
         # Convert the answer to a string and strip quotes
         response = str(answer[0]).strip('"')
         # Validate the response for an IP address
         ip_match = re.search(r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b', response)
+
         if ip_match:
-            return ip_match.group(0)
+            ext_ip_cache = ip_match.group(0)
+            last_ext_ip_check = now
+            #print(f"[DEBUG] External IP refreshed: {ext_ip_cache}")
+            return ext_ip_cache
         else:
-            print(f"Unexpected response format: {response}")
-            return "n/a"
+            #print(f"[DEBUG] Unexpected response format: {response}")
+            ext_ip_cache = "n/a"
+            last_ext_ip_check = now
+            return ext_ip_cache
 
     except Exception as e:
         print(f"Failed to query {dns_server} ({target_domain}): {e}")
-        return "n/a"
+        ext_ip_cache = "n/a"
+        last_ext_ip_check = now
+        return ext_ip_cache
 
 def draw_system_info():
-    global running
-    global network_fails
+    global running, network_fails, ext_ip_cache, last_ext_ip_check
     signal_strength = 0
     touch_pressed_time = 0
     int_ip = "n/a"
@@ -1030,6 +1053,8 @@ def draw_system_info():
             print(f"Failed to get internal IP: {e}")
             
         if int_ip == "n/a":
+            ext_ip_cache = None
+            last_ext_ip_check = 0
             for i in range(31, 0, -1):
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
@@ -1087,7 +1112,7 @@ def draw_system_info():
             battery_color = orange
         elif battery_info_float < 25:
             battery_color = red
-        if battery_info_float < 10:
+        if battery_info_float < 10 and not battery_charging:
             running = False
             subprocess.run(["sudo", "poweroff"])
             close_app()
@@ -1125,32 +1150,59 @@ def draw_system_info():
     # Battery indicator
     fill_width = int((battery_info_float / 100) * (battery_width - 4))
 
-    # Although bars are typically used for radio, it is a better fit for the UI here (looks just cleaner)
-    # Signal strength thresholds (dBm ranges)
-    thresholds = [-90, -80, -70, -60, -50]  # One threshold for each bar
-    num_bars = 5  # Total number of bars in the icon
-    bar_width = 8  # Width of each bar
-    bar_height_step = 4  # Height increment for each bar
-    bar_spacing = 2  # Spacing between bars
-    bar_x = width - x_offset - battery_width - terminal_width - bar_width - (num_bars * (bar_width + bar_spacing))  # Align bars to the right
-    bar_y = y_offset  # Adjust vertical position
+    ### Wifi signal indicator (pie shape)
+    # Define signal strength thresholds (one per pie segment, strongest first)
+    thresholds = [-50, -60, -70, -80, -90]  # Strongest to weakest
 
-    # Draw signal strength bars
-    for i in range(num_bars):
-        bar_height = (i + 1) * bar_height_step
-        if info_rssi is not None and info_rssi >= thresholds[i]:
-            bar_color = magenta  # Active bar
-        else:
-            bar_color = grey  # Inactive bar
+    # Positioning (align next to battery indicator)
+    wifi_x = width - x_offset - battery_width - terminal_width - 30  # Adjust positioning
+    wifi_y = y_offset + 20  # Adjust vertical alignment
 
-        bar_rect = pygame.Rect(
-            bar_x + i * (bar_width + bar_spacing), 
-            bar_y + (num_bars - i - 1) * bar_height_step, 
-            bar_width, 
-            bar_height
-        )
-        # Draw the bar
-        pygame.draw.rect(system_surface, bar_color, bar_rect)
+    # Pie icon parameters
+    max_radius = 20  # Maximum radius of the pie shape
+    min_radius = 5
+    num_sections = len(thresholds)  # Number of signal levels
+    angle_step = 90 / num_sections  # Angle for each section (90° divided into levels)
+
+    # Draw pie base
+    pie_color = grey
+    for i in range(num_sections):
+        # Calculate arc angles for each section
+        start_angle = math.radians(45 + (i * angle_step))  # Start angle for segment
+        end_angle = math.radians(45 + ((i + 1) * angle_step))  # End angle for segment
+
+        # Define pie segment (triangular shape)
+        pie_base_points = [
+            (wifi_x, wifi_y),  # Center point (base of pie)
+            (wifi_x + max_radius * math.cos(start_angle), wifi_y - max_radius * math.sin(start_angle)),  # Outer start
+            (wifi_x + max_radius * math.cos(end_angle), wifi_y - max_radius * math.sin(end_angle)),  # Outer end
+        ]
+
+        # Draw pie base
+        pygame.draw.polygon(system_surface, pie_color, pie_base_points)
+
+    # Compute radius based on signal strength
+    if info_rssi is not None:
+        radius = min_radius + (max_radius - min_radius) * max(0, min(1, (info_rssi + 90) / 40))
+    else:
+        radius = min_radius  # Default to weakest size if no signal
+
+    # Draw pie slices for signal strength
+    pie_color = magenta
+    for i in range(num_sections):
+        # Calculate arc angles for each section
+        start_angle = math.radians(45 + (i * angle_step))  # Start angle for segment
+        end_angle = math.radians(45 + ((i + 1) * angle_step))  # End angle for segment
+
+        # Define pie segment (triangular shape)
+        points = [
+            (wifi_x, wifi_y),  # Center point (base of pie)
+            (wifi_x + radius * math.cos(start_angle), wifi_y - radius * math.sin(start_angle)),  # Outer start
+            (wifi_x + radius * math.cos(end_angle), wifi_y - radius * math.sin(end_angle)),  # Outer end
+        ]
+
+        # Draw pie segment
+        pygame.draw.polygon(system_surface, pie_color, points)
 
     # Draw the battery outline
     pygame.draw.rect(system_surface, grey, (battery_x, battery_y, battery_width, battery_height), 2)
