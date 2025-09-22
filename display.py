@@ -1013,13 +1013,13 @@ def get_external_ip_via_dns():
             return ext_ip_cache
         else:
             #print(f"[DEBUG] Unexpected response format: {response}")
-            ext_ip_cache = "n/a"
+            ext_ip_cache = None
             last_ext_ip_check = now
             return ext_ip_cache
 
     except Exception as e:
         print(f"Failed to query {dns_server} ({target_domain}): {e}")
-        ext_ip_cache = "n/a"
+        ext_ip_cache = None
         last_ext_ip_check = now
         return ext_ip_cache
 
@@ -1027,10 +1027,10 @@ def draw_system_info():
     global running, network_fails, ext_ip_cache, last_ext_ip_check
     signal_strength = 0
     touch_pressed_time = 0
-    int_ip = "n/a"
-    ext_ip = "n/a"
+    int_ip = None
+    ext_ip = None
 
-    while int_ip == "n/a":
+    while int_ip is None:
         try:
             interface = netifaces.gateways()['default'][netifaces.AF_INET][1]
             int_ip = netifaces.ifaddresses(interface)[netifaces.AF_INET][0]['addr']
@@ -1039,7 +1039,7 @@ def draw_system_info():
                 try:
                     ext_ip = get_external_ip_via_dns()
                 except Exception as e:
-                    ext_ip = "n/a"
+                    ext_ip = None
                     print(f"Failed to get external IP: {e}")
             else:
                 network_fails += 1
@@ -1049,10 +1049,10 @@ def draw_system_info():
                     except Exception as e:
                         print(f"Failed to reassociate: {e}")
         except Exception as e:
-            int_ip = "n/a"
+            int_ip = None
             print(f"Failed to get internal IP: {e}")
-            
-        if int_ip == "n/a":
+
+        if int_ip is None:
             ext_ip_cache = None
             last_ext_ip_check = 0
             for i in range(31, 0, -1):
@@ -1120,8 +1120,14 @@ def draw_system_info():
         battery_color = system_surface_background
         battery_info_float = 0
 
-    info_ext_ip = f"Ext IP: {ext_ip}"
-    info_int_ip = f"Int IP: {int_ip}"
+    if ext_ip is None:
+        info_ext_ip = f"Ext IP: n/a"
+    else:
+        info_ext_ip = f"Ext IP: {ext_ip}"
+    if int_ip is None:
+        info_int_ip = f"Int IP: n/a"
+    else:
+        info_int_ip = f"Int IP: {int_ip}"
     info_text_ext_ip = info_font.render(info_ext_ip, True, magenta)
     info_text_int_ip = info_font.render(info_int_ip, True, magenta)
 
