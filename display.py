@@ -20,7 +20,7 @@ import time
 
 es = Elasticsearch('http://127.0.0.1:64298')
 es_index = "logstash-*"
-version = 'T-Pot Mobile v2.0'
+version = 'T-Pot Mobile v2.0.2'
 local_tz = get_localzone()
 
 # Some global settings
