@@ -1,98 +1,148 @@
 #!/usr/bin/env bash
+set -euo pipefail
+unset CDPATH
+trap 'echo "Installation failed at line $LINENO. Review the error above; no success was assumed." >&2' ERR
 
-# one liner install:
-# env bash -c "$(curl -sL https://github.com/telekom-security/tpotmobile/raw/main/install.sh)"
-
-echo "##########################"
-echo "# T-Pot Mobile Installer #"
-echo "##########################"
-echo
-
-CONFIG_FILE="/boot/firmware/config.txt"
-
-######
-# Go to home folder, install updates and clone repositories
-######
-
-cd $HOME
-sudo apt update
-sudo apt dist-upgrade -y
-sudo apt install git exa mesa-utils micro python3 python3-pygame python3-pip unattended-upgrades -y
-#sudo rpi-update
-git clone https://github.com/telekom-security/tpotmobile
-git clone https://github.com/telekom-security/tpotce
-
-######
-# Setup configs
-######
-
-# Functions to set dtoverlay for DSI 4.3 or 8inch display
-set_dsi_display43() {
-    echo "# Setting up DSI Waveshare 4.3inch capacitive touch display"
-    echo "dtoverlay=vc4-kms-v3d" | sudo tee -a ${CONFIG_FILE}
-    sudo raspi-config nonint do_spi 1 # 0 is enable, 1 is disable
-}
-
-set_dsi_display8() {
-    echo "# Setting up DSI Waveshare 8inch capacitive touch display"
-    # Both overlays are needed for the 8inch display to work properly
-    echo "dtoverlay=vc4-kms-v3d" | sudo tee -a ${CONFIG_FILE}
-    echo "dtoverlay=vc4-kms-dsi-waveshare-panel,8_0_inch" | sudo tee -a ${CONFIG_FILE}
-    sudo raspi-config nonint do_spi 1 # 0 is enable, 1 is disable
-}
-
-# Ask the user to select the display type
-echo
-echo "###################################################"
-echo "# Select the display type:"
-echo "# [1] DSI - Waveshare 4.3inch capacitive"
-echo "# [2] DSI - Waveshare 8.0inch capacitive"
-echo "###################################################"
-echo
-read -p "# Enter your choice (1 or 2): " choice
-
-case $choice in
-    1)
-        set_dsi_display43
-        ;;
-    2)
-        set_dsi_display8
-        ;;
-    *)
-        echo "Invalid choice. Exiting."
+SOURCE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+TPOT_COMMIT=0df39a8752df8d2849359998ad7b14f59ce66e1c
+TPOT_DIR="$HOME/tpotce"
+UI_ONLY=false
+if [[ ${1:-} == "--ui-only" && $# == 1 ]]; then
+    UI_ONLY=true
+elif [[ $# != 0 ]]; then
+    echo "Usage: bash install.sh [--ui-only]" >&2
+    exit 1
+fi
+if [[ $EUID == 0 ]]; then
+    echo "Run as your Raspberry Pi login user, not root." >&2
+    exit 1
+fi
+# shellcheck source=/dev/null
+source /etc/os-release
+if [[ ${VERSION_CODENAME:-} != trixie || $(dpkg --print-architecture) != arm64 ]]; then
+    echo "Raspberry Pi OS Lite Trixie ARM64 is required. Bookworm migration is not supported." >&2
+    exit 1
+fi
+if [[ ! -f "$SOURCE/qml/Main.qml" ]]; then
+    echo "Run the installer from a complete checkout of this UI revision." >&2
+    exit 1
+fi
+if [[ ! $TPOT_DIR =~ ^/[a-zA-Z0-9_./-]+$ ]]; then
+    echo "The home path must not contain spaces or systemd/sed metacharacters." >&2
+    exit 1
+fi
+if $UI_ONLY; then
+    if [[ ! -f /etc/tpotmobile.ini ]]; then
+        echo "--ui-only requires an existing installation of this Qt UI." >&2
         exit 1
-        ;;
-esac
+    fi
+elif [[ -e "$TPOT_DIR" ]]; then
+    echo "$TPOT_DIR already exists. This fresh-install path will not overwrite T-Pot." >&2
+    exit 1
+fi
+if id tpotui >/dev/null 2>&1; then
+    ui_uid=$(id -u tpotui)
+    if ((ui_uid == 0 || ui_uid >= 1000)) || [[ $(getent passwd tpotui | cut -d: -f6) != /var/lib/tpotmobile ]] \
+        || [[ " $(id -nG tpotui) " == *" docker "* ]]; then
+        echo "Existing tpotui account is not the expected isolated system account; review it before installation." >&2
+        exit 1
+    fi
+fi
+sudo -v
+sudo apt-get update
+sudo apt-get install -y --no-install-recommends \
+    git python3 python3-venv python3-pip python3-pyqt6 python3-pyqt6.qtquick \
+    qt6-wayland qml6-module-qtquick qml6-module-qtquick-window \
+    qml6-module-qtquick-controls qml6-module-qtquick-layouts \
+    qml6-module-qtquick-templates qml6-module-qtquick-shapes libqt6svg6 qt6-svg-plugins qml6-module-qtqml-workerscript \
+    qml6-module-qtqml-models weston seatd libgl1-mesa-dri \
+    network-manager iproute2 sudo unattended-upgrades fonts-dejavu-core
 
-echo
-echo "# Now setting up T-Pot Mobile. Please be patient ..."
-sudo raspi-config nonint do_i2c 0 # 0 is enable, 1 is disable - for UPS HAT
-python3 -m venv --system-site-packages tpotmobile/
-cd tpotmobile
-source bin/activate
-pip3 install -r requirements.txt
-deactivate
-cd $HOME
-sudo cp tpotmobile/settings/20auto-upgrades /etc/apt/apt.conf.d/20auto-upgrades
-sudo bash -c "sed s/'\$LOGNAME'/${LOGNAME}/g tpotmobile/settings/tpotdisplay.service > /etc/systemd/system/tpotdisplay.service"
-sudo chmod 644 /etc/systemd/system/tpot* /etc/apt/apt.conf.d/20auto-upgrades
-sudo chown root /etc/systemd/system/tpot* /etc/apt/apt.conf.d/20auto-upgrades
-sudo systemctl enable tpotdisplay.service
-echo
-echo "# Now setting up T-Pot. Please be patient ..."
-cd tpotce
-bash install.sh
+if ! $UI_ONLY; then
+    read -r -p "Display: [1] Waveshare 4.3-inch / [2] Waveshare 8-inch: " choice
+    case "$choice" in
+        1) display=43 ;;
+        2) display=8 ;;
+        *) echo "Invalid display choice." >&2; exit 1 ;;
+    esac
+    sudo python3 "$SOURCE/tools/configure.py" boot /boot/firmware/config.txt --display "$display"
+    sudo raspi-config nonint do_i2c 0
+    sudo raspi-config nonint do_spi 1
+    git clone --no-checkout https://github.com/telekom-security/tpotce "$TPOT_DIR"
+    git -C "$TPOT_DIR" checkout --detach "$TPOT_COMMIT"
+    echo "T-Pot development baseline: $TPOT_COMMIT"
+    (cd "$TPOT_DIR" && bash install.sh -n -t m -b "$TPOT_COMMIT" -r https://github.com/telekom-security/tpotce)
+    if [[ $(git -C "$TPOT_DIR" rev-parse HEAD) != "$TPOT_COMMIT" ]]; then
+        echo "Upstream checkout changed unexpectedly; aborting integration." >&2
+        exit 1
+    fi
+    python3 "$SOURCE/tools/configure.py" env "$TPOT_DIR/.env"
+    cp "$TPOT_DIR/compose/mobile.yml" "$TPOT_DIR/docker-compose.yml"
+    # A pull here is intentional: bootstrap must verify ARM64 image availability.
+    (cd "$TPOT_DIR" && sudo docker compose config --quiet && sudo docker compose pull)
+else
+    sudo systemctl stop tpotdisplay.service tpotweston.service
+fi
 
-cd $HOME
-# We do not want T-Pot to update automatically
-sed -i s/TPOT_PULL_POLICY=always/TPOT_PULL_POLICY=missing/g tpotce/.env
-sed -i '/^TPOT_TYPE=/c\TPOT_TYPE=MOBILE' tpotce/.env
-# We need to adjust the T-Pot service
-sudo bash -c "sed s/'\$LOGNAME'/${LOGNAME}/g tpotmobile/settings/tpot.service > /etc/systemd/system/tpot.service"
+if ! id tpotui >/dev/null 2>&1; then
+    sudo useradd --system --user-group --home-dir /var/lib/tpotmobile --create-home --shell /usr/sbin/nologin tpotui
+fi
+for group in video render input i2c; do
+    getent group "$group" >/dev/null || { echo "Required device group missing: $group" >&2; exit 1; }
+done
+sudo install -d -m 755 /opt/tpotmobile /usr/local/libexec
+sudo install -m 644 "$SOURCE/display.py" "$SOURCE/requirements.txt" /opt/tpotmobile/
+for directory in modules qml images flags; do
+    sudo install -d -m 755 "/opt/tpotmobile/$directory"
+    if [[ $directory == modules ]]; then
+        sudo install -m 644 "$SOURCE"/modules/*.py /opt/tpotmobile/modules/
+    else
+        sudo cp -R "$SOURCE/$directory/." "/opt/tpotmobile/$directory/"
+    fi
+done
+sudo chown -R root:root /opt/tpotmobile
+sudo chmod -R a+rX,go-w /opt/tpotmobile
+sudo python3 -m venv --system-site-packages /opt/tpotmobile/.venv
+sudo /opt/tpotmobile/.venv/bin/pip install -r /opt/tpotmobile/requirements.txt
+sudo install -m 755 "$SOURCE/tools/system_control.py" /usr/local/libexec/tpotmobile-control
+sudo install -d -m 755 /opt/tpotmobile/tools
+sudo install -m 755 "$SOURCE/tools/start-display.sh" "$SOURCE/tools/wait4net.sh" /opt/tpotmobile/tools/
+sudo install -m 644 "$SOURCE/settings/tpotweston.service" "$SOURCE/settings/tpotdisplay.service" /etc/systemd/system/
+sudo install -m 644 "$SOURCE/settings/weston.ini" /etc/tpotmobile-weston.ini
+sudo install -m 644 "$SOURCE/settings/20auto-upgrades" /etc/apt/apt.conf.d/20auto-upgrades
+sudo install -m 440 "$SOURCE/settings/tpotmobile.sudoers" /etc/sudoers.d/tpotmobile
+sudo visudo -cf /etc/sudoers.d/tpotmobile
+if ! $UI_ONLY; then
+    project=$(cd "$TPOT_DIR" && sudo docker compose config --format json | python3 -c 'import json,sys; print(json.load(sys.stdin)["name"])')
+    if [[ ! $project =~ ^[a-z0-9][a-z0-9_-]{0,63}$ ]]; then
+        echo "Invalid effective compose project; cannot configure scoped container status." >&2
+        exit 1
+    fi
+    printf '[tpot]\nproject=%s\n' "$project" | sudo tee /etc/tpotmobile.ini >/dev/null
+    sudo chmod 644 /etc/tpotmobile.ini
+    sed "s|@TPOT_DIR@|$TPOT_DIR|g" "$SOURCE/settings/tpot.service" | sudo tee /etc/systemd/system/tpot.service >/dev/null
+fi
 sudo systemctl daemon-reload
-sudo systemctl enable tpot.service
-# We always want T-Pot Mobile
-cp tpotce/compose/mobile.yml tpotce/docker-compose.yml
-
-echo
-echo "# Done. You can reboot now."
+sudo systemctl enable seatd.service tpotweston.service tpotdisplay.service
+if $UI_ONLY; then
+    sudo systemctl start tpotweston.service tpotdisplay.service
+else
+    sudo systemctl enable tpot.service
+fi
+sudo /opt/tpotmobile/.venv/bin/python3 -c 'from PyQt6.QtQuick import QQuickWindow; import elasticsearch'
+dpkg-query -W python3-pyqt6 python3-pyqt6.qtquick qt6-wayland weston | sudo tee /var/lib/tpotmobile/runtime-versions.txt
+if ! $UI_ONLY; then
+    image_names=$(cd "$TPOT_DIR" && sudo docker compose config --images)
+    if [[ -z "$image_names" ]]; then
+        echo "Mobile compose returned no images; cannot record bootstrap versions." >&2
+        exit 1
+    fi
+    mapfile -t images <<< "$image_names"
+    sudo docker image inspect "${images[@]}" | python3 -c \
+        'import json,sys; print(json.dumps([{key: image[key] for key in ("Id", "RepoTags", "RepoDigests", "Architecture")} for image in json.load(sys.stdin)], indent=2))' \
+        | sudo tee /var/lib/tpotmobile/image-versions.json
+fi
+echo "Qt UI installed. Real DSI/GPU/UPS behavior still needs hardware verification."
+if ! $UI_ONLY; then
+    echo "Reboot when ready. T-Pot images use policy 'missing', not automatic refresh."
+fi

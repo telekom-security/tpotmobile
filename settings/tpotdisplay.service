@@ -1,14 +1,20 @@
 [Unit]
-Description=T-Pot Display
-Wants=docker.service network-online.target
-After=docker.service network-online.target tpot.service
+Description=T-Pot Mobile Qt Quick display
+Wants=tpotweston.service
+After=tpotweston.service
 
 [Service]
-Type=exec
-TimeoutSec=infinity
-WorkingDirectory=/home/$LOGNAME/tpotmobile
-ExecStartPre=/home/$LOGNAME/tpotmobile/tools/wait4net.sh
-ExecStart=/home/$LOGNAME/tpotmobile/bin/python3 /home/$LOGNAME/tpotmobile/display.py
+Type=simple
+User=tpotui
+Group=tpotui
+SupplementaryGroups=render i2c
+WorkingDirectory=/opt/tpotmobile
+Environment=XDG_RUNTIME_DIR=/run/tpotmobile WAYLAND_DISPLAY=wayland-0 QT_QPA_PLATFORM=wayland QT_QUICK_CONTROLS_STYLE=Basic
+ExecStart=/opt/tpotmobile/tools/start-display.sh
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target

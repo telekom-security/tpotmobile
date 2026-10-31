@@ -1,0 +1,4 @@
+tpotui ALL=(root) NOPASSWD: /usr/local/libexec/tpotmobile-control status
+tpotui ALL=(root) NOPASSWD: /usr/local/libexec/tpotmobile-control reboot
+tpotui ALL=(root) NOPASSWD: /usr/local/libexec/tpotmobile-control poweroff
+tpotui ALL=(root) NOPASSWD: /usr/local/libexec/tpotmobile-control brightness *

@@ -9,10 +9,10 @@ RestartSec=5
 Type=simple
 TimeoutSec=infinity
 Environment="DOCKER_CLIENT_TIMEOUT=300" "COMPOSE_HTTP_TIMEOUT=300"
-ExecStartPre=/home/$LOGNAME/tpotmobile/tools/wait4net.sh
-ExecStartPre=-/usr/bin/docker compose -f /home/$LOGNAME/tpotce/docker-compose.yml down -v
-ExecStart=/usr/bin/docker compose -f /home/$LOGNAME/tpotce/docker-compose.yml up
-ExecStop=/usr/bin/docker compose -f /home/$LOGNAME/tpotce/docker-compose.yml down -v
+ExecStartPre=/opt/tpotmobile/tools/wait4net.sh
+ExecStartPre=-/usr/bin/docker compose -f @TPOT_DIR@/docker-compose.yml down -v
+ExecStart=/usr/bin/docker compose -f @TPOT_DIR@/docker-compose.yml up
+ExecStop=/usr/bin/docker compose -f @TPOT_DIR@/docker-compose.yml down -v
 RemainAfterExit=yes
 
 [Install]

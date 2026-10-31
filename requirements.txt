@@ -1,7 +1,4 @@
 dnspython
-elasticsearch==8.18.1
-netifaces
-pytz
+elasticsearch==9.5.1
 requests
-tzlocal
 smbus2

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T-Pot Mobile / Design Lab</title>
+<link rel="icon" href="../../images/telekom-logo-magenta.svg" type="image/svg+xml">
+<link rel="stylesheet" href="mockup.css">
+<main class="lab">
+  <h1>T-Pot Mobile <span>Design Lab</span></h1>
+  <p>Interactive design mockup · synthetic data only · no hardware actions · not a performance benchmark</p>
+  <div class="options">
+    <label>Display <select id="size"><option value="1280">8 inch · 1280 × 800</option><option value="800">4.3 inch · 800 × 480</option></select></label>
+    <label>Battery <select id="battery"><option value="72">72% · discharging</option><option value="8">8% · critical</option><option value="charge">86% · charging</option><option value="unknown">Sensor unavailable</option></select></label>
+    <label>Wi-Fi <select id="wifi"><option value="82">82% · strong</option><option value="24">24% · weak</option><option value="0">Disconnected</option><option value="unknown">Unknown</option></select></label>
+    <button id="newAlarm">New example alarm</button><button id="bootButton">Boot preview</button>
+    <button id="trueSize">Actual size / Fit</button>
+  </div>
+  <p class="description">C · Alarm Intelligence first · tap status icons · fullscreen map · Events and Tops without overview counters</p>
+  <div id="stage"><section id="device" aria-label="Simulated touchscreen"></section></div>
+  <p class="hint">Tap alarms, Activity, navigation and System. The frame uses the actual display pixel layout; Fit only scales the preview. Credentials and IPs are fictional.</p>
+</main>
+<script src="splash-data.js"></script>
+<script src="mockup.js"></script>
+</html>

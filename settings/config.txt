@@ -22,8 +22,7 @@ display_auto_detect=1
 # Automatically load initramfs files, if found
 auto_initramfs=1
 
-# Enable DRM VC4 V3D driver
-dtoverlay=vc4-kms-v3d
+# The DRM/KMS display profile is selected under [all] below.
 max_framebuffers=2
 
 # Don't have the firmware create an initial video= setting in cmdline.txt.

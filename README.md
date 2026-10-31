@@ -20,7 +20,7 @@ We are very happy to share this project continiously as open source, with a huge
 	* 1.2. [4.3 inch](#inch-1)
 * 2. [Requirements](#Requirements)
 * 3. [Installation](#Installation)
-	* 3.1. [One liner installation](#Onelinerinstallation)
+	* 3.1. [Obtain the checkout](#Onelinerinstallation)
 	* 3.2. [Manual installation](#Manualinstallation)
 * 4. [LTE Stick settings](#LTESticksettings)
 * 5. [Usage](#Usage)
@@ -30,9 +30,9 @@ We are very happy to share this project continiously as open source, with a huge
 	* 6.1. [Waiting for Elasticsearch](#WaitingforElasticsearch)
 	* 6.2. [Stats Mode](#StatsMode)
 	* 6.3. [Map Mode](#MapMode)
-	* 6.4. [Open Dialog Box](#OpenDialogBox)
+	* 6.4. [Touch controls and details](#OpenDialogBox)
 		* 6.4.1. [Cancel](#Cancel)
-		* 6.4.2. [Map / Stats](#MapStats)
+		* 6.4.2. [Presentation and system status](#MapStats)
 		* 6.4.3. [Reboot](#Reboot)
 		* 6.4.4. [Power Off](#PowerOff)
 * 7. [Maintenance and Troubleshooting](#MaintenanceandTroubleshooting)
@@ -93,29 +93,34 @@ Regarding the hardware limits of the Raspberry Pi4 platform (mainly RAM and stor
 
 ##  2. <a name='Requirements'></a>Requirements
 
-- Raspbian Lite, 64bit based on Raspbian / Debian Bookworm
-- At least T-Pot 24.04.0 which will be installed by the T-Pot Mobile installer
+- Raspberry Pi OS **Lite, Trixie (Debian 13), ARM64**. Bookworm and in-place OS upgrades are not supported.
+- Qt 6 Quick/QML (including Shapes and SVG image plugins) from system packages, Mesa and a minimal Weston Wayland kiosk. No desktop, browser or XWayland is installed.
+- T-Pot `dev-24.04.2`, inspected baseline `0df39a8752df8d2849359998ad7b14f59ce66e1c`, installed with the upstream Mobile edition. This baseline uses Elasticsearch 9; the Python client is pinned to 9.5.1.
 - Prepare the microSD Card with a user i.e. `tsec` and the WiFi settings for your local network (adjustments of the Wifi settings are described [here](#network-settings))
 
 ##  3. <a name='Installation'></a>Installation
 
-###  3.1. <a name='Onelinerinstallation'></a>One liner installation
-`env bash -c "$(curl -sL https://github.com/telekom-security/tpotmobile/raw/main/install.sh)"`
+###  3.1. <a name='Onelinerinstallation'></a>Obtain the checkout
+Use a complete checkout of the revision containing the Qt UI, rather than piping a moving remote installer into a shell. During development the new branch must be published or copied to the Pi before installation.
 
 ###  3.2. <a name='Manualinstallation'></a>Manual installation
-Boot the machine, SSH into Raspbian on `tcp/22`, run the following commands and follow the installer:
+Boot a fresh Trixie Lite ARM64 installation, SSH in on `tcp/22`, obtain this checkout and run as your normal login user:
 ```
-sudo apt install git
-git clone https://github.com/telekom-security/tpotmobile
 cd tpotmobile
 bash install.sh
 ```
 
-The `install.sh` script will also install T-Pot. When the installer asks for a T-Pot type, please choose `(M)obile` in order to download the correct docker images.
+Select the 4.3-inch or 8-inch display. The installer checks kernel overlays, backs up the original boot config to `config.txt.tpotmobile.bak`, and applies the profile idempotently. Conflicting custom overlays are rejected. The upstream installer receives the explicit Mobile type and pinned commit; follow its terminal prompts.
 
-Then `sudo reboot` the machine, please notice after the reboot SSH will only be available via `tcp/64295`.
+An existing `~/tpotce` is never overwritten by the fresh-install path. Initial image downloads are intentional and fail if required ARM64 images are unavailable. At subsequent starts, `TPOT_PULL_POLICY=missing` prevents refreshing existing images.
 
-It takes about 8 minutes until all services are started successfully after installation.
+The application and virtual environment are installed root-owned under `/opt/tpotmobile`. A dedicated `tpotui` account runs the compositor and UI without Docker group membership. A root-owned helper in `/usr/local/libexec` permits only container status, bounded DSI brightness, reboot and power-off through a restricted sudo policy.
+
+Then `sudo reboot`; after T-Pot installation SSH uses `tcp/64295`. The UI starts independently of Internet and Elasticsearch readiness; T-Pot retains its network startup wait. Package versions and initial image information are recorded in `/var/lib/tpotmobile/`. Pinning a Git commit does not make registry tags immutable; retain image IDs for reproducibility.
+
+For subsequent updates of **this Qt installation**, run `bash install.sh --ui-only` from the updated checkout. This restarts only the UI/compositor; it does not reinstall, pull images for, or stop T-Pot. It does not automatically migrate a legacy Pygame installation.
+
+**Physical Pi acceptance is still open:** DSI touch mapping, the GPU path, UPS charging direction, brightness, whole-device RAM and battery savings require hardware validation. Software tests and synthetic screenshots do not certify these outcomes.
 
 ##  4. <a name='LTESticksettings'></a>LTE Stick settings
 - Login: Factory default, adjust after setup
@@ -128,41 +133,58 @@ It takes about 8 minutes until all services are started successfully after insta
 ##  5. <a name='Usage'></a>Usage
 ###  5.1. <a name='Turnon'></a>Turn on
 - After turning the device on (UPS HAT power switch in on-position) the device will automatically boot and wait for the mobile network / WiFi to be fully enabled.
-- It takes roughly 8-10 minutes until all services have been started, then the first events should trickle in.
+- The touchscreen remains usable while services start. Actual startup time depends on the SD card, network and container load.
 ###  5.2. <a name='Turnoff'></a>Turn off
 - After [Shutting Down](#power-off) the device can be turned off (UPS HAT power switch in off-position). Always shutdown the device first to avoid damaging the elasticsearch index and / or filesystem.
 
 ##  6. <a name='T-PotMobileUI'></a>T-Pot Mobile UI
-The UI has been developed using Pygame (Raspbian / Debian Bookworm is fully supported and required).<br>
+The frontend implements the approved Qt 6 Quick/QML design: a dark honeycomb/SOC theme, Telekom magenta `RGB 226/0/116`, the supplied Telekom SVG in the header, and stable honeypot colours shared by events, donuts and map markers. All interface text is English. Elasticsearch, DNS, I2C and subprocess work run in background workers, not touch handlers. Only the current page is loaded; models, animations and history are bounded.
+
+![Qt UI, 4.3-inch synthetic development fixture](screenshots/ui_qt_43.png)
+![Qt UI, 8-inch synthetic development fixture](screenshots/ui_qt_8.png)
+
 ###  6.1. <a name='WaitingforElasticsearch'></a>Waiting for Elasticsearch
-- Once the device has started the UI will wait for Elasticsearch to be available, afterwards the UI will switch into stats mode (default: Last 1h). The UI can be fully utilized once events have been written to the Elasticsearch index.
+- A size-adapted canonical T-Pot ANSI splash is shown during startup. It switches to Overview after a displayed splash frame and a successful event poll, without a fixed countdown. **Open UI** allows immediate access even while Elasticsearch is unavailable. The offline boot logo is generated from the same pinned upstream pixel data as the approved mockup.
+- The compact header shows the clock, Wi-Fi arcs, battery icon and data/follow indicators. The 8-inch header also labels Public IP and the development baseline. Tap Wi-Fi/battery icons for numeric values and errors; charging uses an upward arrow inside the battery. Tap the data indicator for stale/connection information.
+- Status indicators share a vector drawing grid and centered 46x46px touch areas, rather than mixing font glyphs with drawn icons.
+- Errors and stale data are labelled. Last valid data is retained; an unavailable count is `--`, not a fabricated zero.
 ###  6.2. <a name='StatsMode'></a>Stats Mode
-- A single touch will switch between the available timeframes (Last 1m, 15m, 1h, 24h).
-![T-Pot 8 inch 1](screenshots/ui1.png)
+- Tap a timeframe card to select Last 1m, 15m, 1h or 24h. Cached information stays visible while the selected chart refreshes asynchronously.
+- The 8-inch Overview has a full-height Alarm Intelligence panel on the left and three complete Attack Stream cards above Activity on the right. The compact view prioritizes country, IP, service, reputation and credentials with a one-line command preview; tap it for larger, complete details.
+- Service includes the destination port; coordinates use degrees and compass directions. The Overview timestamp is local and compact, and AS organization text wraps between words.
+- Tap Activity to open a fullscreen histogram with count/time grid. Its four timeframe buttons and **Back** are all 64x52px, with a vertical divider before Back. A warning mark indicates unavailable/refreshing statistics; cached chart timestamps stay associated with the displayed data.
+- All four counts, the selected histogram, top country names/codes, honeypots and target services use one aggregation request about every 5 seconds. Donut legends include country flags; the same count formatter is used throughout: English thousands separators on 8 inches, K/M notation on 4.3 inches.
 ###  6.3. <a name='MapMode'></a>Map Mode
-- In Map Mode the UI will display the events on a map utilizing some animations.
-![T-Pot 8 inch 1](screenshots/ui3.png)
-###  6.4. <a name='OpenDialogBox'></a>Open Dialog Box
-- Swiping up from the bottom of the screen towards the top of the screen (at least half the height of the screen) will open the dialog box.
-![T-Pot 8 inch 1](screenshots/ui2.png)<br>
-![T-Pot 8 inch 1](screenshots/ui4.png)<br>
+- Tap **Map** for a fullscreen map with recent event cards and 18px timestamps. Its bounded pool contains three native QML attack effects, combining ping rings and correctly projected quadratic Bezier paths. Each effect ends after 1.35 seconds. Flight paths use the event's destination geolocation; missing destination coordinates produce source-only pings, not an invented sensor location.
+- Hidden/resized maps cancel effects. **System / Effects on/off** or the `--no-animations` option disables them. No animation runs in idle periods without new events.
+- Map labels are kept clear of the header/event overlays and connected to their original marker positions with leader lines. Label layout does not change geographic coordinates.
+- Missing location data does not discard events from the feed.
+###  6.4. <a name='OpenDialogBox'></a>Touch controls and details
+- Use the visible bottom navigation: **Overview**, **Map**, **Events**, **Tops**, **System**. Explicit touch controls replace the legacy swipe-to-open menu.
+- Tap an event for scrollable details. Commands, credentials and requests are displayed as plain text, never executed or interpreted as markup.
+- Overview initially follows the latest event. A manual selection holds its data, even if it leaves the recent-event buffer; **Follow live** resumes. Events uses two columns on 8 inches and full-width compact rows on 4.3 inches, with at least three complete fixture event cards visible. Events and Tops omit the Overview count cards.
+- Event cards have subtle rounded honeypot-colour outlines; selection uses a stronger continuous outline. Distribution legends form compact right-anchored blocks, vertically centered beside the donuts, with left-aligned names and right-aligned values.
+- Legend names and values have 32px spacing on 8 inches and 16px on 4.3 inches. Flags align to the text's capital height above the baseline, ignoring descenders, rather than its line box. Subtle flag outlines keep dark bands distinguishable from the panel background. Port rows share fixed label/value column widths so all bar tracks stay equal in width; fill lengths remain proportional to event counts.
+- The live feed retains 200 events. Approximately once per second, acquisition uses a **fresh** point-in-time snapshot, sorted pagination, a 10-second overlap and ID deduplication. Polls are capped at 1,000 hits, with an overload notice. Snapshot open/close calls are additional to search calls.
+- This is a recent-event visualization, not a lossless archive. Delayed indexing beyond the overlap, long outages and bursts can exceed its catch-up window; stored honeypot data is unaffected. Source-IP events are included without a fixed honeypot-name whitelist; Suricata, P0f and Fatt telemetry are excluded.
 ####  6.4.1. <a name='Cancel'></a>Cancel
-- Will exit the dialog box. 
-####  6.4.2. <a name='MapStats'></a>Map / Stats
-- While in Stats mode the button will be called "Map" and when pressed will open the Map mode.
-- While in Map mode the button will be called "Stats" and when pressed will open the Stats mode.
+- **Back** dismisses alarm details/histogram; **Close** dismisses status popovers; **Cancel** dismisses a power confirmation.
+####  6.4.2. <a name='MapStats'></a>Presentation and system status
+- **System / Enable demo** enables presentation mode, off by default. It rotates the five **live** views every 20 seconds. Touch pauses rotation; **System / Resume** continues it and **Disable demo** turns it off. Open details, popovers and fullscreen histograms pause rotation. No synthetic attacks are introduced.
+- **System** shows CPU, RAM, temperature, Mobile container state, network information, UPS readings and a bounded 10-minute power history. System/UPS sampling is about every 5 seconds; network/container status about every 30 seconds.
+- Valid discharge measurements cap brightness at 60%, respecting lower manual choices. A manual change overrides the cap until the next observed power-source transition. Unknown charging state does not change brightness. The display and honeypots stay on; screen blanking is disabled.
+- Battery percentage is a voltage-based **estimate**, not a calibrated fuel gauge. Three consecutive valid discharge readings below 10% request shutdown. Missing or invalid readings never trigger power-off.
 ####  6.4.3. <a name='Reboot'></a>Reboot
-- The Reboot button will reboot the system. 
+- **System / Reboot** requires confirmation and stops honeypot operation while rebooting.
 ####  6.4.4. <a name='PowerOff'></a>Power Off
-- The Power Off button will shut down the system. The system is designed for 24/7 operation, however it needs to be turned off using the Power Off function to avoid damaging the file system or elastic search indices.
+- **System / Power off** requires confirmation. Use it before switching off the UPS to protect the filesystem and Elasticsearch data.
 
 ##  7. <a name='MaintenanceandTroubleshooting'></a>Maintenance and Troubleshooting
 ###  7.1. <a name='Connectakeyboard'></a>Connect a keyboard
 - For troubleshooting you can connect a keyboard.
 ###  7.2. <a name='ExittheGUI'></a>Exit the GUI
 - Press `q` to exit the GUI.
-- Login to the system with your username, i.e. `tsec` and the password you chose.
-- You now have access to the console as with any other Raspbian / Debian installation.
+- Use SSH or another console (for example Ctrl+Alt+F2) to log in. The kiosk owns tty1; quitting its UI does not restore the legacy tty1 login prompt.
 ###  7.3. <a name='StartingStoppingT-Potservices'></a>Starting / Stopping T-Pot services
 - In `/etc/systemd/system` are the T-Pot systemd service files `tpot.service` and `tpotdisplay.service` located. While `tpot.service` does control the T-Pot services `tpotdisplay.service` controls the T-Pot Mobile GUI.
 - Start T-Pot: `sudo systemctl start tpot.service`
@@ -174,12 +196,45 @@ The UI has been developed using Pygame (Raspbian / Debian Bookworm is fully supp
 ###  7.5. <a name='Updates'></a>Updates
 - While OS updates will be installed automatically the docker image pull policy is set to `missing`. This means even if newer image versions are available `docker compose` will not pull them. If your mobile connection is perfectly fine with downloading large docker image files then you can adjust `TPOT_PULL_POLICY` in `tpotce/.env` to `always`. Otherwise install updates using a different network connection i.e. LAN / WiFi.
 - Update tpotce: `cd tpotce && sudo systemctl stop tpot && git pull`
-- Update tpotmobile: `cd tpotmobile && sudo systemctl stop tpotdisplay && git pull`
+- Update tpotmobile: update the checkout, then `bash install.sh --ui-only`. Installed code is a root-owned copy; `git pull` alone does not change the running UI.
 - Update docker images: `cd tpotce && docker compose -f docker-compose.yml pull`
 ###  7.6. <a name='NetworkSettings'></a>Network Settings
 - Raspbian uses Network Manager by default.
 - You can find and adjust network connections in `/etc/NetworkManager/system-connections`.
 - By default you will find `preconfigured.nmconnection` which contains the settings provided by Raspberry Pi Imager.
+
+### Development and validation
+
+The [interactive design laboratory](tools/design/index.html) retains the
+approved browser design at both display sizes. The production QML frontend
+now implements it; map effects were rebuilt natively instead of reusing the
+mockup's animation code.
+
+Install the Qt/QML runtime packages listed in `install.sh`, then:
+```
+python3 -m venv --system-site-packages .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python display.py --fixture --size 800x480
+.venv/bin/python display.py --fixture --size 1280x800 --scenario burst
+.venv/bin/python display.py --fixture --size 800x480 --view Events
+.venv/bin/python display.py --fixture --size 1280x800 --view Map
+.venv/bin/python display.py --fixture --size 800x480 --scenario charging
+.venv/bin/python display.py --fixture --size 800x480 --boot
+```
+For macOS development only, install `PyQt6` into that environment; deployment uses Trixie system packages.
+
+The separate `--fixture` mode is labelled by the amber status indicator and status/boot popovers, and never creates an Elasticsearch client, reads real hardware, or executes power/brightness commands. Scenarios: `normal`, `empty`, `burst`, `offline`, `partial`, `low-battery`, `charging`. It is not the live presentation mode. The fixture uses clearly synthetic IPs, credentials and destination coordinates.
+```
+QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software .venv/bin/python -m unittest discover -s tests -v
+.venv/bin/python display.py --fixture --snapshot /tmp/tpot-preview.png --size 1280x800
+```
+`--snapshot`, `--quit-after`, `--view` and `--boot` are fixture-only controls. `--no-animations` also works in live mode. Tests cover pagination, real SDK serialization, bounded models, both layouts, exact event visibility/control dimensions, projection, actual Bezier beam positions, effect termination/limits, held selection, presentation pausing, fixture isolation and power policies. Run `python3 tools/build_splash.py` to regenerate the offline PNGs from the pinned, already extracted ANSI data; no Internet is needed.
+
+On a physical Pi, check touch coordinates, scrolling, confirmations, I2C charging direction and brightness across mains/battery transitions. Check `journalctl -u tpotweston -u tpotdisplay` for graphics/helper errors and inspect Qt/Mesa renderer logs to establish GPU acceleration rather than assuming it.
+
+Compare old and new UI with identical warmed-up T-Pot, traffic, network, brightness and power source. Record process **PSS**, whole-system available RAM, CPU load, temperature/throttling, touch latency, transition frame times and UPS watts/runtime. GPU/kernel allocations are not all captured by PSS. Measure renderer savings at equal brightness separately from brightness reduction; dark LCD colours alone do not reduce backlight load. Do not publish battery/FPS improvements until measured.
+
+For recovery, stop/restart the UI services over SSH. Review subsequent changes before restoring `config.txt.tpotmobile.bak`. Keep an SD/data backup and the original Git revision for returning to a legacy installation. `--ui-only` does not change stored honeypot data.
 
 ##  8. <a name='dPrintSettings'></a>3d Print Settings
 For 3d printing we were using PLA+ filament with the following settings, depending on your usage other filament types need to be considered i.e. PETG, ABS or ASA (those remain untested regarding the case).

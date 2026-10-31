@@ -1,0 +1,172 @@
+:root { color-scheme:dark; --pink:#e20074; --ink:#080a10; --panel:#12141e; --line:#2c2538; --muted:#b9b1c1; --cyan:#78cddd; }
+* { box-sizing:border-box; }
+body { margin:0; background:#17171c; color:#eee9f1; font:15px system-ui,sans-serif; }
+.lab { padding:24px; max-width:1500px; margin:auto; }
+h1 { font-size:24px; margin:0; } h1 span { font-weight:400; color:#aaa; }
+.lab>p { color:#bbb; font-size:13px; }
+.options { display:flex; flex-wrap:wrap; align-items:end; gap:12px; }
+label { display:grid; gap:5px; font-size:12px; color:#bbb; }
+button,select { font:inherit; color:inherit; border:1px solid #49404e; background:#27212c; border-radius:8px; padding:10px 14px; cursor:pointer; }
+button:hover { border-color:var(--pink); }
+button:focus-visible,select:focus-visible,[role=button]:focus-visible { outline:3px solid var(--cyan); outline-offset:2px; }
+#stage { overflow:auto; padding:8px 0 12px; }
+#device { position:relative; transform-origin:top left; background:var(--ink); overflow:hidden; display:flex; flex-direction:column; padding:8px 20px 12px; gap:12px; border:1px solid #3b2539; border-top:3px solid var(--pink); isolation:isolate; }
+#device::before { content:""; position:absolute; inset:0; pointer-events:none; z-index:-1; opacity:.23; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='92' height='80' viewBox='0 0 92 80'%3E%3Cpath d='M23 1h46l22 39-22 39H23L1 40Z' fill='none' stroke='%23571a40' stroke-width='.7'/%3E%3C/svg%3E"); mask-image:linear-gradient(120deg,transparent 15%,black); }
+.mono { font-family:ui-monospace,"DejaVu Sans Mono",monospace; font-variant-numeric:tabular-nums; }
+.top { display:flex; align-items:center; gap:12px; height:52px; flex-shrink:0; border-bottom:1px solid var(--line); }
+.brand { display:flex; align-items:center; gap:14px; margin-right:auto; white-space:nowrap; }
+.brand img { width:30px; height:36px; } .brand strong { letter-spacing:1px; font-size:23px; }
+.version { font-size:15px; color:var(--muted); }
+.publicIp { display:grid; gap:1px; margin-right:8px; }
+.publicIp small { font-size:11px; letter-spacing:.8px; color:var(--muted); }
+.publicIp strong { font-size:19px; font-weight:500; }
+.iconButton { height:46px; width:46px; padding:7px; border:0; background:transparent; display:flex; align-items:center; justify-content:center; font-size:25px; color:var(--muted); }
+.fixtureBadge { color:#ffbe77; } .followIcon { color:var(--pink); }
+.clock { font-size:24px; min-width:116px; text-align:right; }
+.wifiButton svg { width:32px; height:32px; }
+.wifiButton path { stroke:#443b4c; stroke-width:2; fill:none; stroke-linecap:round; }
+.wifiButton circle { fill:#443b4c; }
+.wifiButton path.on { stroke:var(--pink); } .wifiButton circle.on { fill:var(--pink); }
+.wifiButton path.alert { stroke:#f0907c; stroke-width:2; }
+.batteryIcon { display:block; width:34px; height:20px; border:2px solid #e2d9e6; padding:2px; border-radius:4px; position:relative; font-size:17px; line-height:12px; text-align:center; }
+.batteryIcon::after { content:""; position:absolute; width:4px; height:9px; top:4px; right:-6px; background:#e2d9e6; border-radius:2px; }
+.batteryIcon i { display:block; height:100%; background:var(--pink); }
+.batteryIcon b { position:absolute; inset:0; display:grid; place-items:center; font-size:17px; text-shadow:0 0 3px #080a10; } .critical .batteryIcon i { background:#ff725f; }
+.batteryButton { position:relative; }
+.chargeIcon { position:absolute; width:14px; height:14px; top:1px; left:8px; }
+.chargeIcon path { fill:none; stroke:#fff; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.counters { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+.counter { height:76px; background:linear-gradient(130deg,#19131e,#11121b); text-align:left; padding:9px 18px; border-color:#302738; }
+.counter.active { border-color:var(--pink); box-shadow:inset 3px 0 var(--pink); }
+.counter small { display:block; font-size:14px; letter-spacing:1px; color:var(--muted); }
+.counter strong { display:block; margin-top:3px; font-size:29px; font-weight:500; }
+.body { display:grid; gap:14px; flex:1; min-height:0; grid-template-rows:minmax(0,1fr); }
+.layoutC { grid-template-columns:minmax(0,1.4fr) minmax(0,1fr); }
+.rightColumn { display:grid; grid-template-rows:minmax(0,1fr) 178px; gap:12px; min-height:0; }
+.panel { border:1px solid var(--line); background:rgba(18,20,30,.94); border-radius:12px; min-height:0; min-width:0; overflow:hidden; padding:16px; display:flex; flex-direction:column; }
+.panelTitle { display:flex; align-items:center; justify-content:space-between; font-size:14px; letter-spacing:.8px; color:var(--muted); min-height:27px; margin-bottom:12px; gap:8px; }
+.liveControl { font-size:13px; padding:6px 10px; min-height:36px; }
+.detailPanel { border-top:2px solid var(--pot,var(--pink)); }
+.details { overflow:auto; flex:1; min-height:0; }
+.country { display:flex; align-items:center; gap:16px; padding-bottom:14px; border-bottom:1px solid var(--line); margin-bottom:16px; }
+.flag { width:54px; height:36px; object-fit:cover; border-radius:2px; flex-shrink:0; }
+.country .flag { width:81px; height:54px; } .country strong { font-size:26px; } .country small { display:block; font-size:16px; color:var(--muted); margin-top:5px; }
+.potBadge { margin-left:auto; border:1px solid var(--pot); color:var(--pot); padding:7px 9px; border-radius:6px; font-size:15px; }
+.detailGrid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:17px 16px; }
+.field { min-width:0; } .field label { font-size:13px; letter-spacing:.5px; color:var(--muted); text-transform:uppercase; }
+.field p { margin:5px 0 0; font-size:19px; overflow-wrap:anywhere; }
+.field.wide { grid-column:1 / 3; }
+.credentials { color:#ff92c7; } .reputation { color:#ffbe77; }
+.command { padding:12px; margin-top:5px; background:#080a10; border-left:3px solid var(--pot,var(--pink)); font:16px/1.5 ui-monospace,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
+.feed { overflow:auto; display:grid; align-content:start; gap:8px; }
+.feedPanel:not(.expandedFeed) { padding:12px; }
+.feedPanel:not(.expandedFeed) .panelTitle { min-height:22px; margin-bottom:9px; font-size:13px; }
+.alarm { display:flex; align-items:center; gap:10px; height:91px; text-align:left; padding:8px 10px; background:#191621; border:1px solid transparent; border-left:3px solid var(--pot); }
+.alarm.selected { border-color:var(--pot); background:#241825; }
+.alarmText { min-width:0; flex:1; }
+.eventHeading { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+.alarm strong { font-size:19px; color:var(--pot); display:block; }
+.alarm small { display:block; margin-top:4px; color:var(--muted); font-size:14px; overflow-wrap:anywhere; }
+.alarm time { margin-left:auto; font-size:13px; color:#d1bdce; white-space:nowrap; }
+.rightColumn .alarm time { font-size:18px; }
+.eventRep { display:block; font-size:14px; color:#edc795; margin-top:4px; }
+.eventCommand { display:block; margin-top:7px; font-size:16px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.expandedFeed .feed { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.expandedFeed .alarm { height:146px; padding:12px; } .expandedFeed .alarm strong { font-size:21px; } .expandedFeed .alarm small,.expandedFeed .eventRep { font-size:16px; }
+.expandedFeed .flag { width:66px; height:44px; }
+.chartPanel { cursor:pointer; } .chartPanel:hover { border-color:#a43870; }
+canvas.chart { display:block; width:100%; height:100%; min-height:0; flex:1; }
+.nav { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-top:auto; flex-shrink:0; }
+.nav button { height:60px; font-size:19px; background:#17131e; }
+.nav button.active { background:var(--pink); border-color:var(--pink); }
+.overlay { position:absolute; inset:0; z-index:5; padding:22px; background:#080a10; display:flex; flex-direction:column; gap:14px; }
+.overlayHeader { display:flex; align-items:center; gap:16px; } .overlayHeader h2 { font-size:21px; margin:0; } .overlayHeader button { min-height:52px; margin-left:auto; }
+.chartToolbar { margin-left:auto; display:flex; align-items:center; gap:12px; }
+.chartToolbar .timeframes button { margin-left:0; }
+.chartOverlay .chartToolbar button { width:64px; height:52px; min-height:52px; flex-shrink:0; padding:0; font-size:16px; margin-left:0; }
+.toolbarDivider { width:1px; height:32px; background:#655069; flex-shrink:0; }
+.overlay .panel { flex:1; }
+.timeframes { display:flex; gap:10px; } .timeframes button { min-height:44px; } .timeframes button.active { border-color:var(--pink); }
+.statusOverlay { align-items:center; justify-content:center; background:#080a10cf; }
+.statusCard { background:#18121f; border:1px solid #a13870; border-radius:14px; padding:26px; width:min(600px,90%); }
+.statusCard h2 { margin:0 0 14px; font-size:22px; }
+.statusCard p { white-space:pre-line; font-size:19px; line-height:1.7; } .statusCard button { min-height:50px; width:100%; }
+.systems { display:grid; grid-template-columns:1fr 1fr; gap:20px; overflow:auto; }
+.systems h3 { color:var(--pink); } .systems button { min-height:55px; } .systems p { color:var(--muted); line-height:1.6; }
+.boot { text-align:center; align-items:center; justify-content:center; background:radial-gradient(ellipse at center,#24091b,#080a10 70%); }
+.boot canvas { image-rendering:pixelated; height:64%; max-width:85%; object-fit:contain; }
+.boot h2 { letter-spacing:5px; font-size:17px; } .boot p { color:#b2a0b0; font-size:13px; } .boot button { min-height:60px; }
+#device.mapMode { padding:0!important; }
+.fullMap { position:absolute; inset:0; background:#05060b; }
+.worldMap { width:100%; height:100%; display:block; } .worldMap text { fill:#f5e3ed; font:22px ui-monospace,monospace; paint-order:stroke; stroke:#080a10; stroke-width:4px; }
+.attackEffect { pointer-events:none; }
+.attackPing { transform-box:fill-box; transform-origin:center; }
+.mapMarker { cursor:pointer; }
+.mapMarker text { pointer-events:none; }
+.critical .batteryIcon { border-color:#ff725f; }
+.mapHeading { position:absolute; inset:12px 16px auto; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.mapHeading>span { padding:10px 14px; background:#0d0c15e8; border-radius:8px; font-size:19px; letter-spacing:1px; }
+.mapHeading small { color:#ffbe77; margin-left:12px; font-size:13px; }
+.mapHeading button { min-height:52px; }
+.mapEventStrip { position:absolute; inset:auto 16px 38px; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+.mapEvent { display:flex; align-items:center; gap:10px; text-align:left; background:#100e1de8; border-left:3px solid var(--pot); min-width:0; padding:12px; }
+.mapEvent>span { min-width:0; flex:1; } .mapEvent strong { display:block; color:var(--pot); font-size:17px; } .mapEvent small { display:block; font-size:15px; margin-top:4px; overflow-wrap:anywhere; }
+.mapEvent time { margin-left:auto; font-size:18px; }
+.mapLegend { position:absolute; bottom:12px; left:20px; font-size:13px; color:#ccb9cd; }
+.topsHeading { display:flex; align-items:center; justify-content:space-between; font-size:16px; }
+.topsGrid { grid-template-columns:1fr 1fr; grid-template-rows:minmax(0,1fr) 160px; }
+.portPanel { grid-column:1 / 3; }
+.distribution { display:flex; align-items:center; gap:12px; flex:1; min-height:0; }
+.donut { width:46%; height:100%; min-height:0; }
+.legend { flex:1; display:grid; gap:17px; }
+.legend>div { display:flex; align-items:center; gap:9px; font-size:17px; }
+.legend i { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.legend strong { margin-left:auto; font-size:18px; }
+.legendFlag { width:30px; height:20px; object-fit:cover; flex-shrink:0; }
+.serviceBars { display:grid; grid-template-columns:1fr 1fr; gap:18px 28px; }
+.serviceBars>div { display:flex; align-items:center; gap:12px; font-size:16px; }
+.serviceBars span { width:108px; flex-shrink:0; } .serviceBars strong { width:52px; text-align:right; }
+.barTrack { height:12px; border-radius:4px; background:#26202e; flex:1; overflow:hidden; } .barTrack i { display:block; height:100%; }
+.small { padding:5px 12px 9px!important; gap:8px!important; }
+.small .top { height:45px; gap:8px; } .small .brand { gap:10px; } .small .brand img { width:26px; height:31px; }
+.small .brand strong { font-size:20px; } .small .version,.small .publicIp { display:none; }
+.small .clock { font-size:21px; min-width:100px; } .small .iconButton { width:42px; height:42px; }
+.small .counters { gap:8px; } .small .counter { height:59px; padding:7px 12px; } .small .counter strong { font-size:24px; } .small .counter small { font-size:12px; }
+.small .body { gap:8px; } .small .layoutC { grid-template-columns:minmax(0,1.65fr) minmax(0,1fr); }
+.small .rightColumn { grid-template-rows:minmax(0,1fr); }
+.small .rightColumn .feedPanel { display:none; }
+.small .panel { padding:10px; border-radius:9px; } .small .panelTitle { font-size:12px; min-height:22px; margin-bottom:7px; }
+.small .liveControl { font-size:11px; min-height:30px; padding:4px 8px; }
+.small .country { gap:10px; padding-bottom:7px; margin-bottom:8px; } .small .country .flag { width:54px; height:36px; } .small .country strong { font-size:20px; } .small .country small { font-size:13px; margin-top:2px; }
+.small .potBadge { font-size:12px; padding:4px 6px; }
+.small .detailGrid { gap:8px 12px; } .small .field label { font-size:12px; } .small .field p { font-size:16px; margin-top:2px; }
+.compactDetails .country { min-height:36px; margin-bottom:8px; }
+.compactDetails .detailGrid { gap:7px 12px; }
+.compactDetails .reputation { display:flex; gap:10px; align-items:baseline; }
+.commandPreview { grid-column:1 / 3; display:grid; gap:4px; padding:7px 8px; text-align:left; background:#080a10; border:0; border-left:3px solid var(--pot); border-radius:0; min-width:0; }
+.commandPreview>span { display:flex; justify-content:space-between; color:var(--muted); font-size:11px; }
+.commandPreview b { font-weight:500; color:#f39ecb; } .commandPreview code { font:14px ui-monospace,monospace; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.small .command { font-size:12px; line-height:1.4; padding:7px; }
+.small .nav { gap:8px; } .small .nav button { height:52px; font-size:16px; }
+.small .expandedFeed .feed { grid-template-columns:minmax(0,1fr); gap:8px; }
+.small .expandedFeed .alarm { height:94px; padding:8px 10px; } .small .expandedFeed .alarm strong { font-size:20px; }
+.small .expandedFeed .alarm small,.small .expandedFeed .eventRep { font-size:16px; } .small .expandedFeed .flag { width:60px; height:40px; }
+.small .eventCommand { font-size:14px; margin-top:4px; } .small .alarm time { font-size:14px; }
+.small .expandedFeed .alarmText { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr); column-gap:12px; row-gap:3px; }
+.small .expandedFeed .eventHeading,.small .expandedFeed .eventCommand { grid-column:1 / 3; }
+.small .expandedFeed .alarm small,.small .expandedFeed .eventRep,.small .expandedFeed .eventCommand { margin:0; }
+.small .expandedFeed .alarm small { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.small .overlay { padding:14px; gap:10px; } .small .overlay .field p { font-size:20px; } .small .overlay .command { font-size:18px; }
+.small .systems { gap:12px; font-size:14px; } .small .boot h2 { font-size:13px; }
+.small .mapHeading>span { font-size:15px; } .small .mapEventStrip { grid-template-columns:repeat(2,minmax(0,1fr)); bottom:32px; }
+.small .mapEvent { padding:8px; } .small .mapEvent .flag { width:42px; height:28px; }
+.small .mapEvent strong { font-size:17px; } .small .mapEvent small { font-size:16px; } .small .mapLegend { font-size:12px; bottom:9px; }
+.small .mapEvent time { font-size:18px; }
+.small .chartOverlay .overlayHeader { gap:10px; }
+.small .chartOverlay h2 { font-size:18px; }
+.small .worldMap text { font-size:28px; }
+.small .topsHeading { font-size:13px; } .small .timeframes { gap:6px; } .small .timeframes button { min-height:38px; padding:6px 12px; }
+.small .topsGrid { gap:8px; grid-template-rows:minmax(0,1fr) 114px; }
+.small .legend { gap:10px; } .small .legend>div { font-size:14px; gap:6px; } .small .legend strong { font-size:15px; }
+.small .legendFlag { width:24px; height:16px; }
+.small .serviceBars { gap:10px 16px; } .small .serviceBars>div { font-size:13px; gap:8px; } .small .serviceBars span { width:85px; }

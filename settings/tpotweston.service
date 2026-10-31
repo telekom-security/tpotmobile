@@ -1,0 +1,25 @@
+[Unit]
+Description=T-Pot Mobile Wayland kiosk
+Wants=seatd.service
+After=seatd.service
+Conflicts=getty@tty1.service
+
+[Service]
+Type=simple
+User=tpotui
+Group=tpotui
+SupplementaryGroups=video render input
+RuntimeDirectory=tpotmobile
+RuntimeDirectoryMode=0700
+Environment=XDG_RUNTIME_DIR=/run/tpotmobile LIBSEAT_BACKEND=seatd
+ExecStart=/usr/bin/weston --backend=drm --renderer=gl --socket=wayland-0 --config=/etc/tpotmobile-weston.ini
+Restart=always
+RestartSec=3
+TTYPath=/dev/tty1
+StandardInput=tty
+TTYReset=yes
+TTYVHangup=yes
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
