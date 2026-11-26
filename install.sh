@@ -48,9 +48,62 @@ if id tpotui >/dev/null 2>&1; then
         exit 1
     fi
 fi
-sudo -v
+upstream_args=(-s -t m -b "$TPOT_COMMIT" -r https://github.com/telekom-security/tpotce)
+secure_mode=false
+if ! $UI_ONLY; then
+    read -r -p "Display: [1] Waveshare 4.3-inch / [2] Waveshare 8-inch: " choice
+    case "$choice" in
+        1) display=43 ;;
+        2) display=8 ;;
+        *) echo "Invalid display choice." >&2; exit 1 ;;
+    esac
+    read -r -p "sudo after installation: [1] require password (default) / [2] passwordless: " choice
+    case "$choice" in
+        1|"") secure_mode=true ;;
+        2) upstream_args+=(--sudo-nopasswd) ;;
+        *) echo "Invalid sudo mode." >&2; exit 1 ;;
+    esac
+fi
+
+password_file=
+if $secure_mode; then
+    if [[ $(LC_ALL=C passwd -S "$(id -un)" | awk '{print $2}') != P ]]; then
+        echo "Secure sudo needs a login password. Set one with passwd before installing." >&2
+        exit 1
+    fi
+fi
+if $secure_mode || ! sudo -n -k true 2>/dev/null; then
+    # The upstream installer accepts a private file with -B. Keep it in RAM.
+    set +x
+    password_file=$(mktemp /dev/shm/tpotmobile-password.XXXXXXXX)
+    trap 'rm -f -- "$password_file"' EXIT
+    trap 'exit 1' HUP INT TERM
+    IFS= read -rs -p "Login password for sudo: " password
+    printf '\n' >&2
+    printf '%s\n' "$password" > "$password_file"
+    unset password
+    # The login user owns the password file and opens it before sudo starts.
+    # shellcheck disable=SC2024
+    sudo -k -S -p '' -v < "$password_file"
+    upstream_args+=(-B "$password_file")
+fi
+read -r -p "Start installation now? [y/N]: " answer
+case "$answer" in
+    y|Y) ;;
+    *) echo "Installation cancelled."; exit 1 ;;
+esac
+
+# Keep command stdin available (notably for tee) even after sudo's cache expires.
+sudo() {
+    if [[ -n $password_file ]]; then
+        command sudo -S -p '' -v < "$password_file" || return
+    fi
+    command sudo -n "$@"
+}
+exec </dev/null
+export GIT_TERMINAL_PROMPT=0 DEBIAN_FRONTEND=noninteractive
 sudo apt-get update
-sudo apt-get install -y --no-install-recommends \
+sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get -o Dpkg::Options::=--force-confold install -y --no-install-recommends \
     git python3 python3-venv python3-pip python3-pyqt6 python3-pyqt6.qtquick \
     qt6-wayland qml6-module-qtquick qml6-module-qtquick-window \
     qml6-module-qtquick-controls qml6-module-qtquick-layouts \
@@ -60,20 +113,14 @@ sudo apt-get install -y --no-install-recommends \
 
 if ! $UI_ONLY; then
     # Upstream's Ansible deb822_repository task imports debian.deb822 from system Python.
-    sudo apt-get install -y --no-install-recommends python3-debian
-    read -r -p "Display: [1] Waveshare 4.3-inch / [2] Waveshare 8-inch: " choice
-    case "$choice" in
-        1) display=43 ;;
-        2) display=8 ;;
-        *) echo "Invalid display choice." >&2; exit 1 ;;
-    esac
+    sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3-debian
     sudo python3 "$SOURCE/tools/configure.py" boot /boot/firmware/config.txt --display "$display"
     sudo raspi-config nonint do_i2c 0
     sudo raspi-config nonint do_spi 1
     git clone --no-checkout https://github.com/telekom-security/tpotce "$TPOT_DIR"
     git -C "$TPOT_DIR" checkout --detach "$TPOT_COMMIT"
     echo "T-Pot development baseline: $TPOT_COMMIT"
-    (cd "$TPOT_DIR" && bash install.sh -n -t m -b "$TPOT_COMMIT" -r https://github.com/telekom-security/tpotce)
+    (cd "$TPOT_DIR" && bash install.sh "${upstream_args[@]}")
     if [[ $(git -C "$TPOT_DIR" rev-parse HEAD) != "$TPOT_COMMIT" ]]; then
         echo "Upstream checkout changed unexpectedly; aborting integration." >&2
         exit 1
@@ -109,7 +156,7 @@ done
 sudo chown -R root:root /opt/tpotmobile
 sudo chmod -R a+rX,go-w /opt/tpotmobile
 sudo python3 -m venv --system-site-packages /opt/tpotmobile/.venv
-sudo /opt/tpotmobile/.venv/bin/pip install -r /opt/tpotmobile/requirements.txt
+sudo /opt/tpotmobile/.venv/bin/pip --no-input install -r /opt/tpotmobile/requirements.txt
 sudo install -m 755 "$SOURCE/tools/system_control.py" /usr/local/libexec/tpotmobile-control
 sudo install -d -m 755 /opt/tpotmobile/tools
 sudo install -m 755 "$SOURCE/tools/start-display.sh" "$SOURCE/tools/wait4net.sh" /opt/tpotmobile/tools/
