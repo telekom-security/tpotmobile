@@ -95,7 +95,7 @@ Regarding the hardware limits of the Raspberry Pi4 platform (mainly RAM and stor
 
 - Raspberry Pi OS **Lite, Trixie (Debian 13), ARM64**. Bookworm and in-place OS upgrades are not supported.
 - Qt 6 Quick/QML (including Shapes and SVG image plugins) from system packages, Mesa and a minimal Weston Wayland kiosk. No desktop, browser or XWayland is installed.
-- T-Pot `dev-24.04.2`, inspected baseline `0df39a8752df8d2849359998ad7b14f59ce66e1c`, installed with the upstream Mobile edition. This baseline uses Elasticsearch 9; the Python client is pinned to 9.5.1.
+- T-Pot `dev-24.04.2`, pinned to [39d7f375](https://github.com/telekom-security/tpotce/commit/39d7f375253b446305d7941ad2f09d66a6968c96), installed with the upstream Mobile edition. This baseline builds Elasticsearch 9.5.4; the Python client remains pinned to 9.5.1.
 - Prepare the microSD Card with a user i.e. `tsec` and the WiFi settings for your local network (adjustments of the Wifi settings are described [here](#network-settings))
 
 ##  3. <a name='Installation'></a>Installation
@@ -112,7 +112,7 @@ bash install.sh
 
 Select the 4.3-inch or 8-inch display. The installer checks kernel overlays, backs up the original boot config to `config.txt.tpotmobile.bak`, and applies the profile idempotently. Conflicting custom overlays are rejected. The upstream installer receives the explicit Mobile type and pinned commit; follow its terminal prompts.
 
-An existing `~/tpotce` is never overwritten by the fresh-install path. Initial image downloads are intentional and fail if required ARM64 images are unavailable. At subsequent starts, `TPOT_PULL_POLICY=missing` prevents refreshing existing images.
+An existing `~/tpotce` is never overwritten by the fresh-install path. T-Pot generates `.env` from `env.example` and stamps `docker-compose.yml` from its Mobile edition. The mobile installer keeps both source fingerprints and sets `TPOT_TYPE=MOBILE` and `TPOT_PULL_POLICY=missing`. Initial image downloads are intentional and fail if required ARM64 images are unavailable. Subsequent starts do not refresh existing images.
 
 The application and virtual environment are installed root-owned under `/opt/tpotmobile`. A dedicated `tpotui` account runs the compositor and UI without Docker group membership. A root-owned helper in `/usr/local/libexec` permits only container status, bounded DSI brightness, reboot and power-off through a restricted sudo policy.
 
@@ -194,8 +194,8 @@ The frontend implements the approved Qt 6 Quick/QML design: a dark honeycomb/SOC
 ###  7.4. <a name='Cronjob'></a>Cronjob
 - T-Pot Mobile will restart the device by default every day. You can change the cronjob settings with `sudo crontab -e`.
 ###  7.5. <a name='Updates'></a>Updates
-- While OS updates will be installed automatically the docker image pull policy is set to `missing`. This means even if newer image versions are available `docker compose` will not pull them. If your mobile connection is perfectly fine with downloading large docker image files then you can adjust `TPOT_PULL_POLICY` in `tpotce/.env` to `always`. Otherwise install updates using a different network connection i.e. LAN / WiFi.
-- Update tpotce: `cd tpotce && sudo systemctl stop tpot && git pull`
+- On Debian, T-Pot manages weekly security and Docker Engine updates (`TPOT_AUTO_UPDATES` in `~/tpotce/.env`). This is separate from container image downloads: keep `TPOT_PULL_POLICY=missing` on metered LTE and use LAN or WiFi for manual pulls.
+- The T-Pot checkout is pinned (detached HEAD); do not use `git pull` to upgrade it. To deploy a newer tested baseline, use its matching tpotmobile installer on a fresh card. A UI-only update does not migrate T-Pot.
 - Update tpotmobile: update the checkout, then `bash install.sh --ui-only`. Installed code is a root-owned copy; `git pull` alone does not change the running UI.
 - Update docker images: `cd tpotce && docker compose -f docker-compose.yml pull`
 ###  7.6. <a name='NetworkSettings'></a>Network Settings
