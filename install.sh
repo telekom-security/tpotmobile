@@ -59,6 +59,8 @@ sudo apt-get install -y --no-install-recommends \
     network-manager iproute2 sudo fonts-dejavu-core
 
 if ! $UI_ONLY; then
+    # Upstream's Ansible deb822_repository task imports debian.deb822 from system Python.
+    sudo apt-get install -y --no-install-recommends python3-debian
     read -r -p "Display: [1] Waveshare 4.3-inch / [2] Waveshare 8-inch: " choice
     case "$choice" in
         1) display=43 ;;

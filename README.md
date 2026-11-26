@@ -110,7 +110,7 @@ cd tpotmobile
 bash install.sh
 ```
 
-Select the 4.3-inch or 8-inch display. The installer checks kernel overlays, backs up the original boot config to `config.txt.tpotmobile.bak`, and applies the profile idempotently. Conflicting custom overlays are rejected. The upstream installer receives the explicit Mobile type and pinned commit; follow its terminal prompts.
+Select the 4.3-inch or 8-inch display. The installer checks kernel overlays, backs up the original boot config to `config.txt.tpotmobile.bak`, and applies the profile idempotently. Conflicting custom overlays are rejected. Fresh installs also install the Debian package `python3-debian`, which Ansible needs to configure the Docker APT repository. The upstream installer receives the explicit Mobile type and pinned commit; follow its terminal prompts.
 
 An existing `~/tpotce` is never overwritten by the fresh-install path. T-Pot generates `.env` from `env.example` and stamps `docker-compose.yml` from its Mobile edition. The mobile installer keeps both source fingerprints and sets `TPOT_TYPE=MOBILE` and `TPOT_PULL_POLICY=missing`. Initial image downloads are intentional and fail if required ARM64 images are unavailable. Subsequent starts do not refresh existing images.
 
