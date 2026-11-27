@@ -112,6 +112,8 @@ bash install.sh
 
 Before any packages or boot settings change, select the display and sudo mode, enter your login password if needed, and confirm the installation. Secure sudo (the default) requires an existing login password; use `passwd` first if your account only has an SSH key. The upstream Mobile installer then runs unattended at the pinned commit. `--ui-only` skips display and sudo-mode selection and leaves the sudo mode unchanged.
 
+Review the summary before confirming; pressing Enter cancels by default. Once started, the installer shows a heading for each phase and streams the command output live. Set `NO_COLOR=1` for plain installer headings over SSH; redirected headings are already plain text.
+
 The installer checks kernel overlays, backs up the original boot config to `config.txt.tpotmobile.bak`, and applies the profile idempotently. Conflicting custom overlays are rejected. Fresh installs also install the Debian package `python3-debian`, which Ansible needs to configure the Docker APT repository.
 
 An existing `~/tpotce` is never overwritten by the fresh-install path. T-Pot generates `.env` from `env.example` and stamps `docker-compose.yml` from its Mobile edition. The mobile installer keeps both source fingerprints and sets `TPOT_TYPE=MOBILE` and `TPOT_PULL_POLICY=missing`. Initial image downloads are intentional and fail if required ARM64 images are unavailable. Subsequent starts do not refresh existing images.

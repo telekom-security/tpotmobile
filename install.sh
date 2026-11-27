@@ -1,7 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 unset CDPATH
-trap 'echo "Installation failed at line $LINENO. Review the error above; no success was assumed." >&2' ERR
+phase="Checking prerequisites"
+trap 'printf "\nInstallation failed: %s (line %s). See the error above.\n" "$phase" "$LINENO" >&2' ERR
+accent='' reset=''
+if [[ -t 2 && ${TERM:-dumb} != dumb && -z ${NO_COLOR+x} ]]; then
+    accent=$'\033[1;35m' reset=$'\033[0m'
+fi
+heading() {
+    printf '\n%s== %s ==%s\n' "$accent" "$1" "$reset" >&2
+}
+step() {
+    phase=$1
+    heading "$phase"
+}
 
 SOURCE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 TPOT_COMMIT=39d7f375253b446305d7941ad2f09d66a6968c96
@@ -12,6 +24,12 @@ if [[ ${1:-} == "--ui-only" && $# == 1 ]]; then
 elif [[ $# != 0 ]]; then
     echo "Usage: bash install.sh [--ui-only]" >&2
     exit 1
+fi
+heading "T-Pot Mobile"
+if $UI_ONLY; then
+    echo "UI update | T-Pot stays unchanged" >&2
+else
+    echo "Fresh installation | Raspberry Pi OS Lite" >&2
 fi
 if [[ $EUID == 0 ]]; then
     echo "Run as your Raspberry Pi login user, not root." >&2
@@ -51,13 +69,17 @@ fi
 upstream_args=(-s -t m -b "$TPOT_COMMIT" -r https://github.com/telekom-security/tpotce)
 secure_mode=false
 if ! $UI_ONLY; then
-    read -r -p "Display: [1] Waveshare 4.3-inch / [2] Waveshare 8-inch: " choice
+    heading "Display"
+    printf '  1) Waveshare 4.3-inch\n  2) Waveshare 8-inch\n' >&2
+    read -r -p "Select display [1/2]: " choice
     case "$choice" in
-        1) display=43 ;;
-        2) display=8 ;;
+        1) display=43; display_label="Waveshare 4.3-inch" ;;
+        2) display=8; display_label="Waveshare 8-inch" ;;
         *) echo "Invalid display choice." >&2; exit 1 ;;
     esac
-    read -r -p "sudo after installation: [1] require password (default) / [2] passwordless: " choice
+    heading "sudo after installation"
+    printf '  1) Require a password (default)\n  2) Allow passwordless sudo\n' >&2
+    read -r -p "Select sudo mode [1]: " choice
     case "$choice" in
         1|"") secure_mode=true ;;
         2) upstream_args+=(--sudo-nopasswd) ;;
@@ -87,6 +109,14 @@ if $secure_mode || ! sudo -n -k true 2>/dev/null; then
     sudo -k -S -p '' -v < "$password_file"
     upstream_args+=(-B "$password_file")
 fi
+heading "Review before starting"
+if $UI_ONLY; then
+    printf '  Update and restart the display UI and compositor only.\n  T-Pot configuration and images will not change.\n' >&2
+else
+    sudo_label="Passwordless"
+    if $secure_mode; then sudo_label="Password required"; fi
+    printf '  Display:   %s\n  sudo:      %s\n  T-Pot:     Mobile (%s)\n' "$display_label" "$sudo_label" "${TPOT_COMMIT:0:8}" >&2
+fi
 read -r -p "Start installation now? [y/N]: " answer
 case "$answer" in
     y|Y) ;;
@@ -102,6 +132,7 @@ sudo() {
 }
 exec </dev/null
 export GIT_TERMINAL_PROMPT=0 DEBIAN_FRONTEND=noninteractive
+step "Installing system packages"
 sudo apt-get update
 sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get -o Dpkg::Options::=--force-confold install -y --no-install-recommends \
     git python3 python3-venv python3-pip python3-pyqt6 python3-pyqt6.qtquick \
@@ -114,9 +145,11 @@ sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get -o Dpkg::Opti
 if ! $UI_ONLY; then
     # Upstream's Ansible deb822_repository task imports debian.deb822 from system Python.
     sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3-debian
+    step "Configuring the display hardware"
     sudo python3 "$SOURCE/tools/configure.py" boot /boot/firmware/config.txt --display "$display"
     sudo raspi-config nonint do_i2c 0
     sudo raspi-config nonint do_spi 1
+    step "Installing T-Pot Mobile and pulling images"
     git clone --no-checkout https://github.com/telekom-security/tpotce "$TPOT_DIR"
     git -C "$TPOT_DIR" checkout --detach "$TPOT_COMMIT"
     echo "T-Pot development baseline: $TPOT_COMMIT"
@@ -134,9 +167,11 @@ if ! $UI_ONLY; then
     # A pull here is intentional: bootstrap must verify ARM64 image availability.
     (cd "$TPOT_DIR" && sudo docker compose config --quiet && sudo docker compose pull)
 else
+    step "Stopping the display UI and compositor"
     sudo systemctl stop tpotdisplay.service tpotweston.service
 fi
 
+step "Installing the display UI"
 if ! id tpotui >/dev/null 2>&1; then
     sudo useradd --system --user-group --home-dir /var/lib/tpotmobile --create-home --shell /usr/sbin/nologin tpotui
 fi
@@ -174,6 +209,7 @@ if ! $UI_ONLY; then
     sudo chmod 644 /etc/tpotmobile.ini
     sed "s|@TPOT_DIR@|$TPOT_DIR|g" "$SOURCE/settings/tpot.service" | sudo tee /etc/systemd/system/tpot.service >/dev/null
 fi
+step "Configuring services"
 sudo systemctl daemon-reload
 sudo systemctl enable seatd.service tpotweston.service tpotdisplay.service
 if $UI_ONLY; then
@@ -181,6 +217,7 @@ if $UI_ONLY; then
 else
     sudo systemctl enable tpot.service
 fi
+step "Checking the runtime and recording versions"
 sudo /opt/tpotmobile/.venv/bin/python3 -c 'from PyQt6.QtQuick import QQuickWindow; import elasticsearch'
 dpkg-query -W python3-pyqt6 python3-pyqt6.qtquick qt6-wayland weston | sudo tee /var/lib/tpotmobile/runtime-versions.txt
 if ! $UI_ONLY; then
@@ -194,7 +231,9 @@ if ! $UI_ONLY; then
         'import json,sys; print(json.dumps([{key: image[key] for key in ("Id", "RepoTags", "RepoDigests", "Architecture")} for image in json.load(sys.stdin)], indent=2))' \
         | sudo tee /var/lib/tpotmobile/image-versions.json
 fi
-echo "Qt UI installed. Real DSI/GPU/UPS behavior still needs hardware verification."
-if ! $UI_ONLY; then
-    echo "Reboot when ready. T-Pot images use policy 'missing', not automatic refresh."
+heading "Installation complete"
+if $UI_ONLY; then
+    echo "Display UI and compositor restarted. Check the display; no reboot is needed."
+else
+    echo "Reboot when ready, then check the display and UPS. T-Pot pulls missing images only."
 fi
